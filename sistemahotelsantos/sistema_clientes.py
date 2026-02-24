@@ -22,7 +22,7 @@ except ImportError:
 class SistemaCreditos:
     def __init__(self, db_name="hotel.db"):
         self.db_name = db_name
-        self.versao_atual = "1.0.0"  # Versão atual do software
+        self.versao_atual = "1.0.0"  # IMPORTANTE: Mude isso antes de criar a tag no git
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
@@ -755,7 +755,7 @@ class SistemaCreditos:
     # =========================================================================
     # 7. AUTO-UPDATE (GITHUB)
     # =========================================================================
-    def verificar_atualizacao(self, repo_usuario, repo_nome):
+    def verificar_atualizacao(self, repo_usuario="gabriel-ram0s", repo_nome="sistemahotelsantos"):
         """
         Verifica se há uma nova release no GitHub.
         Retorna (bool_tem_update, nova_versao, url_download)
