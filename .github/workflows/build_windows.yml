@@ -26,67 +26,49 @@ jobs:
       - name: Instalar Dependências Python
         run: |
           pip install --upgrade pip
-          pip install pyinstaller requests fpdf
+          pip install pyinstaller requests fpdf customtkinter tkcalendar matplotlib pyinstaller-hooks-contrib
+
+      - name: Rodar Testes Unitários
+        shell: powershell
+        run: |
+          # Localiza o arquivo de teste (pode estar na raiz ou subpasta)
+          $testFile = "sistemahotelsantos/test_sistema.py"
+          if (-not (Test-Path $testFile)) { $testFile = "test_sistema.py" }
+          
+          if (Test-Path $testFile) {
+              Write-Host "Executando testes em: $testFile"
+              python $testFile
+          } else {
+              Write-Warning "Arquivo de teste não encontrado. Pulando etapa de testes."
+          }
 
       - name: Gerar Executável (PyInstaller)
         shell: powershell
         run: |
-          # Tenta localizar o script principal
-          $target = "sistemahotelsantos/sistema_clientes.py"
-          if (-not (Test-Path $target)) { $target = "sistema_clientes.py" }
+          # Tenta localizar o script principal da GUI
+          $target = "sistemahotelsantos/app_gui.py"
+          if (-not (Test-Path $target)) { $target = "app_gui.py" }
           
           if (-not (Test-Path $target)) {
-              Write-Error "ERRO: Arquivo sistema_clientes.py não encontrado!"
+              Write-Error "ERRO: Arquivo app_gui.py não encontrado!"
               exit 1
           }
           
           # Gera o .exe na pasta dist na raiz
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --distpath ./dist $target
+          # --collect-all customtkinter garante que temas e assets da lib gráfica sejam incluídos
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --collect-all customtkinter --distpath ./dist $target
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --collect-all customtkinter --hidden-import babel.numbers --distpath ./dist $target
 
-      - name: Instalar Inno Setup
-        run: choco install innosetup --no-progress
-
-      - name: Compilar Instalador (ISCC)
-        shell: powershell
+      - name: Listar Arquivos Gerados (Debug - Dist)
         run: |
-          # 1. Localizar o arquivo .iss (pode estar na raiz ou na subpasta)
-          $issFile = Get-ChildItem -Recurse -Filter "setup_script.iss" | Select-Object -First 1
-          
-          if (-not $issFile) {
-              Write-Error "ERRO: Arquivo setup_script.iss não encontrado no repositório."
-              exit 1
-          }
-          
-          Write-Host "Arquivo ISS encontrado em: $($issFile.FullName)"
-          
-          # 2. Mover para a raiz se necessário (para que o Source: dist\... funcione)
-          $destPath = Join-Path (Get-Location) "setup_script.iss"
-          if ($issFile.FullName -ne $destPath) {
-              Move-Item $issFile.FullName $destPath -Force
-              Write-Host "Arquivo movido para a raiz para compilação."
-          }
-          
-          # 3. Executar o compilador (ISCC)
-          # O Chocolatey adiciona o ISCC ao PATH, então tentamos chamar direto 'iscc'.
-          # Se falhar, tentamos o caminho padrão.
-          $isccCmd = "iscc"
-          if (-not (Get-Command $isccCmd -ErrorAction SilentlyContinue)) {
-              $isccCmd = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          }
-          
-          Write-Host "Compilando com: $isccCmd"
-          & $isccCmd "setup_script.iss"
+          Write-Host "Conteúdo de dist (Executável):"
+          if (Test-Path "./dist") { Get-ChildItem ./dist } else { Write-Host "Pasta dist não existe." }
 
-      - name: Listar Arquivos Gerados (Debug)
-        run: |
-          Write-Host "Conteúdo de Output (Instalador):"
-          if (Test-Path "./Output") { Get-ChildItem ./Output } else { Write-Host "Pasta Output não existe." }
-
-      - name: Upload do Instalador (Artifact)
+      - name: Upload do Executável (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: Instalador-SistemaHotel
-          path: Output/*.exe
+          name: SistemaHotel-Exe
+          path: dist/*.exe
           retention-days: 5
 
       - name: Criar Release (Apenas Tags)
@@ -95,6 +77,5 @@ jobs:
         with:
           files: |
             dist/SistemaHotel.exe
-            Output/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
