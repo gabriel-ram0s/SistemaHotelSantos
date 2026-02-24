@@ -1,19 +1,9 @@
-- name: Instalar Dependências
-        run: |
-          python -m pip install --upgrade pip
-          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
-          
-      - name: Gerar Instalador MSI
-        run: |
-          # Adicionamos o PYTHONPATH para garantir que o setup.py enxergue as libs
-          $env:PYTHONPATH = "."
-          python setup.py bdist_msi
-
 name: Build Windows MSI Installer
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   workflow_dispatch:
 
 permissions:
@@ -26,31 +16,82 @@ jobs:
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Configurar Python
+      - name: Configurar Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      - name: Instalar Dependências
+      - name: Instalar Dependências do Sistema
         run: |
           python -m pip install --upgrade pip
           pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
 
-      - name: Gerar Instalador MSI
-        run: |
-          # O comando bdist_msi gera o arquivo de instalação .msi
-          python setup.py bdist_msi
-
-      - name: Assinatura Digital de Referência
+      - name: Validar Estrutura de Pastas
         shell: powershell
         run: |
-          echo "Developed with Gemini AI assistance - Version 2026" > signature.txt
+          Write-Host "Verificando arquivos do projeto..."
+          if (Test-Path "sistemahotelsantos/app_gui.py") {
+              Write-Host "Caminho sistemahotelsantos/app_gui.py confirmado."
+          } elseif (Test-Path "app_gui.py") {
+              Write-Host "Aviso: app_gui.py encontrado na raiz. Ajustando setup.py dinamicamente..."
+              (Get-Content setup.py).Replace('sistemahotelsantos/app_gui.py', 'app_gui.py') | Set-Content setup.py
+          } else {
+              Write-Error "Arquivo app_gui.py não encontrado no repositório!"
+              exit 1
+          }
 
-      - name: Upload do Instalador (Artifact)
+      - name: Gerar Instalador MSI (cx_Freeze)
+        shell: powershell
+        run: |
+          # Define o PYTHONPATH para garantir que o script de setup localize os módulos
+          $env:PYTHONPATH = "."
+          python setup.py bdist_msi
+
+      - name: Criar Assinatura de Autoria
+        shell: powershell
+        run: |
+          $content = @"
+          ==========================================
+          ASSINATURA DIGITAL DE REFERÊNCIA
+          ==========================================
+          Desenvolvedor: [Seu Nome]
+          Assistência: Gemini AI (Google)
+          Data da Build: $(Get-Date -Format 'dd/MM/yyyy HH:mm')
+          Versão de Referência: 2025-12-17
+          Status: Produção / Final
+          ==========================================
+          "@
+          $content | Out-File -FilePath dist/signature.txt -Encoding utf8
+
+      - name: Organizar Artefatos
+        shell: powershell
+        run: |
+          mkdir dist_final
+          # Move o instalador .msi gerado para a pasta final
+          Move-Item dist/*.msi dist_final/
+          Move-Item dist/signature.txt dist_final/
+
+      - name: Upload dos Artefatos (Debug)
         uses: actions/upload-artifact@v4
         with:
-          name: Instalador-Sistema-Hotel
-          # O cx_Freeze coloca o .msi dentro da pasta 'dist'
-          path: dist/*.msi
-          retention-days: 5
+          name: SistemaHotel-Instalador-MSI
+          path: dist_final/
+          retention-days: 7
+
+      - name: Criar Release no GitHub
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist_final/*.msi
+            dist_final/signature.txt
+          body: |
+            Build Automática do Sistema Hotel Santos.
+            Referência de Código: 2025-12-17.
+            Desenvolvido com auxílio de IA.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
