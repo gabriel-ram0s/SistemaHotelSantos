@@ -3,7 +3,7 @@ name: Build Windows EXE
 on:
   push:
     tags:
-      - 'v*' # Dispara apenas quando você envia uma tag (ex: v1.0.1, v1.0.2)
+      - 'v*' # Executa apenas quando uma tag v* é criada
 
 permissions:
   contents: write
@@ -16,23 +16,44 @@ jobs:
     - name: Baixar código
       uses: actions/checkout@v4
 
+    - name: Diagnóstico de Arquivos (Debug)
+      # Lista todos os arquivos para sabermos a estrutura exata no servidor
+      run: Get-ChildItem -Recurse
+
     - name: Configurar Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' 
+        python-version: '3.10'
 
     - name: Instalar Dependências
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller requests fpdf
 
-    - name: Gerar Executável com PyInstaller
-      # --noconsole: não abre a tela preta do terminal
-      # --onefile: gera um único arquivo .exe
+    - name: Gerar Executável
+      # Verifica onde está o arquivo antes de rodar o PyInstaller
       run: |
-        pyinstaller --noconsole --onefile --name="SistemaHotel" sistemahotelsantos/sistema_clientes.py
+        if (Test-Path "sistemahotelsantos/sistema_clientes.py") {
+            Write-Host "Arquivo encontrado em sistemahotelsantos/"
+            pyinstaller --clean --noconsole --onefile --name="SistemaHotel" sistemahotelsantos/sistema_clientes.py
+        } elseif (Test-Path "sistema_clientes.py") {
+            Write-Host "Arquivo encontrado na raiz"
+            pyinstaller --clean --noconsole --onefile --name="SistemaHotel" sistema_clientes.py
+        } else {
+            Write-Error "ERRO CRÍTICO: O arquivo sistema_clientes.py não foi encontrado no repositório."
+            exit 1
+        }
 
-    - name: Criar Release no GitHub
+    - name: Verificar se EXE foi criado
+      run: |
+        if (Test-Path "dist/SistemaHotel.exe") {
+            Write-Host "Sucesso: dist/SistemaHotel.exe gerado corretamente."
+        } else {
+            Write-Error "ERRO: O PyInstaller rodou, mas o arquivo .exe não apareceu na pasta dist."
+            exit 1
+        }
+
+    - name: Publicar Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
