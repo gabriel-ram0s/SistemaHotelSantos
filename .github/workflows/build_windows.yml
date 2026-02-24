@@ -56,7 +56,6 @@ jobs:
           
           # Gera o .exe na pasta dist na raiz
           # --collect-all customtkinter garante que temas e assets da lib gráfica sejam incluídos
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --collect-all customtkinter --distpath ./dist $target
           pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --collect-all customtkinter --hidden-import babel.numbers --distpath ./dist $target
 
       - name: Listar Arquivos Gerados (Debug - Dist)

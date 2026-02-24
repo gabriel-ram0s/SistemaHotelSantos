@@ -22,7 +22,7 @@ except ImportError:
 class SistemaCreditos:
     def __init__(self, db_name="hotel.db"):
         self.db_name = db_name
-        self.versao_atual = "1.0.1"  # Versão atualizada para teste de build
+        self.versao_atual = "1.0.2"  # Versão estável (apenas EXE)
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
@@ -227,6 +227,8 @@ class SistemaCreditos:
         return res
 
     def limpar_valor(self, valor):
+        if isinstance(valor, (int, float)):
+            return float(valor)
         if not valor or str(valor).strip() == "": return 0.0
         return float(str(valor).replace('.', '').replace(',', '.').strip())
 
