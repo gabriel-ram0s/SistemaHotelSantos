@@ -1,9 +1,8 @@
-name: Build Windows MSI Installer (cx_Freeze)
+name: Build Windows MSI Installer
 
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ]
   workflow_dispatch:
 
 permissions:
@@ -17,59 +16,30 @@ jobs:
       - name: Checkout do Código
         uses: actions/checkout@v4
 
-      - name: Configurar Python 3.10
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
       - name: Instalar Dependências
         run: |
           python -m pip install --upgrade pip
           pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
 
-      - name: Rodar Testes Unitários
-        shell: powershell
-        run: |
-          $testFile = "sistemahotelsantos/test_sistema.py"
-          if (-not (Test-Path $testFile)) { $testFile = "test_sistema.py" }
-          if (Test-Path $testFile) { python $testFile }
-
       - name: Gerar Instalador MSI
-        shell: powershell
         run: |
-          # O comando bdist_msi cria o instalador nativo do Windows
+          # O comando bdist_msi gera o arquivo de instalação .msi
           python setup.py bdist_msi
 
-      - name: Organizar Artefatos
+      - name: Assinatura Digital de Referência
         shell: powershell
         run: |
-          mkdir dist_final
-          Move-Item dist/*.msi dist_final/
-
-      - name: Injetar Assinatura Digital (Metadata)
-        shell: powershell
-        run: |
-          $signInfo = "Build-Signature: Gemini-Assisted-Dev-2026`nDeveloped by [Seu Nome] with Gemini"
-          $signInfo | Out-File -FilePath dist_final/signature.txt -Encoding utf8
+          echo "Developed with Gemini AI assistance - Version 2026" > signature.txt
 
       - name: Upload do Instalador (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: SistemaHotel-MSI-Installer
-          path: dist_final/
-          retention-days: 7
-
-      - name: Criar Release e Upload do MSI
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            dist_final/*.msi
-            dist_final/signature.txt
-          body: |
-            Build Windows Nativa (MSI) gerada em 2026.
-            Código de Referência: Versão 2025-12-17.
-            Desenvolvido com auxílio de Gemini AI.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: Instalador-Sistema-Hotel
+          # O cx_Freeze coloca o .msi dentro da pasta 'dist'
+          path: dist/*.msi
+          retention-days: 5
