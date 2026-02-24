@@ -31,35 +31,56 @@ jobs:
       - name: Gerar Executável (PyInstaller)
         shell: powershell
         run: |
+          # Tenta localizar o script principal
           $target = "sistemahotelsantos/sistema_clientes.py"
           if (-not (Test-Path $target)) { $target = "sistema_clientes.py" }
+          
+          if (-not (Test-Path $target)) {
+              Write-Error "ERRO: Arquivo sistema_clientes.py não encontrado!"
+              exit 1
+          }
           
           # Gera o .exe na pasta dist na raiz
           pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --distpath ./dist $target
 
-      # --- CORREÇÃO: Instalação Robusta do Inno Setup ---
       - name: Instalar Inno Setup
         run: choco install innosetup --no-progress
-
-      - name: Preparar Script de Instalação
-        shell: powershell
-        run: |
-          # Move o script para a raiz se ele estiver na subpasta, para encontrar a pasta 'dist' corretamente
-          if (Test-Path "sistemahotelsantos/setup_script.iss") {
-              Move-Item "sistemahotelsantos/setup_script.iss" "setup_script.iss"
-              Write-Host "Script movido para a raiz."
-          }
 
       - name: Compilar Instalador (ISCC)
         shell: powershell
         run: |
-          # Compila usando o executável padrão do Inno Setup
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup_script.iss
+          # 1. Localizar o arquivo .iss (pode estar na raiz ou na subpasta)
+          $issFile = Get-ChildItem -Recurse -Filter "setup_script.iss" | Select-Object -First 1
+          
+          if (-not $issFile) {
+              Write-Error "ERRO: Arquivo setup_script.iss não encontrado no repositório."
+              exit 1
+          }
+          
+          Write-Host "Arquivo ISS encontrado em: $($issFile.FullName)"
+          
+          # 2. Mover para a raiz se necessário (para que o Source: dist\... funcione)
+          $destPath = Join-Path (Get-Location) "setup_script.iss"
+          if ($issFile.FullName -ne $destPath) {
+              Move-Item $issFile.FullName $destPath -Force
+              Write-Host "Arquivo movido para a raiz para compilação."
+          }
+          
+          # 3. Executar o compilador (ISCC)
+          # O Chocolatey adiciona o ISCC ao PATH, então tentamos chamar direto 'iscc'.
+          # Se falhar, tentamos o caminho padrão.
+          $isccCmd = "iscc"
+          if (-not (Get-Command $isccCmd -ErrorAction SilentlyContinue)) {
+              $isccCmd = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          }
+          
+          Write-Host "Compilando com: $isccCmd"
+          & $isccCmd "setup_script.iss"
 
       - name: Listar Arquivos Gerados (Debug)
         run: |
           Write-Host "Conteúdo de Output (Instalador):"
-          Get-ChildItem ./Output
+          if (Test-Path "./Output") { Get-ChildItem ./Output } else { Write-Host "Pasta Output não existe." }
 
       - name: Upload do Instalador (Artifact)
         uses: actions/upload-artifact@v4
