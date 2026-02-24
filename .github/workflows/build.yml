@@ -27,15 +27,13 @@ jobs:
       - name: Instalar Dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
+          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel --force-reinstall
 
-      - name: Validar e Corrigir Setup
+      - name: Debug de Estrutura (Listar Arquivos)
         shell: powershell
         run: |
-          if (Test-Path "app_gui.py") {
-              Write-Host "Ajustando setup.py para raiz..."
-              (Get-Content setup.py).Replace('sistemahotelsantos/app_gui.py', 'app_gui.py') | Set-Content setup.py
-          }
+          Write-Host "Estrutura de arquivos no Runner:"
+          Get-ChildItem -Recurse
 
       - name: Gerar Instalador MSI
         shell: powershell
@@ -43,15 +41,28 @@ jobs:
           $env:PYTHONPATH = "."
           python setup.py bdist_msi
 
-      - name: Organizar e Assinar
+      - name: Organizar Artefatos e Assinar
         shell: powershell
         run: |
           mkdir dist_final
-          if (Test-Path "dist/*.msi") { Move-Item dist/*.msi dist_final/ }
-          "Developed with Gemini AI assistance - Ref 2026" | Out-File -FilePath dist_final/signature.txt -Encoding utf8
+          if (Test-Path "dist/*.msi") { 
+              Move-Item dist/*.msi dist_final/ 
+          }
+          # Assinatura digital conforme instrução de referência
+          $signature = @"
+          ==========================================
+          ASSINATURA DIGITAL DE REFERÊNCIA
+          ==========================================
+          Desenvolvido com assistência de Gemini AI
+          Versão de Referência: 2025-12-17
+          Data da Build: $(Get-Date -Format 'dd/MM/yyyy HH:mm')
+          ==========================================
+          "@
+          $signature | Out-File -FilePath dist_final/signature.txt -Encoding utf8
 
-      - name: Upload Artifact
+      - name: Upload do Instalador
         uses: actions/upload-artifact@v4
         with:
-          name: SistemaHotel-MSI
+          name: SistemaHotel-Instalador
           path: dist_final/
+          retention-days: 7
