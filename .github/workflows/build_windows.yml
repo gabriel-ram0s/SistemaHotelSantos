@@ -1,10 +1,10 @@
-name: Build Windows EXE
+name: Build Windows Installer
 
 on:
   push:
     branches: [ "main" ]
     tags: [ "v*" ]
-  workflow_dispatch: # Permite rodar manualmente na aba Actions
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,49 +23,57 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Instalar Dependências
+      - name: Instalar Dependências Python
         run: |
           pip install --upgrade pip
           pip install pyinstaller requests fpdf
 
-      - name: Verificar Arquivos (Debug)
-        run: Get-ChildItem -Recurse -Filter "*.py"
-
-      - name: Build com PyInstaller
+      - name: Gerar Executável (PyInstaller)
         shell: powershell
         run: |
-          # Define o caminho do script
           $target = "sistemahotelsantos/sistema_clientes.py"
-          if (-not (Test-Path $target)) {
-            $target = "sistema_clientes.py"
-          }
+          if (-not (Test-Path $target)) { $target = "sistema_clientes.py" }
           
-          if (-not (Test-Path $target)) {
-            Write-Error "ERRO: Arquivo sistema_clientes.py não encontrado!"
-            exit 1
-          }
-          
-          Write-Host "Compilando arquivo: $target"
-          
-          # --distpath ./dist : Força o executável a ir para a pasta dist na raiz
-          # --workpath ./build : Força arquivos temporários para build na raiz
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --distpath ./dist --workpath ./build $target
+          # Gera o .exe na pasta dist na raiz
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --distpath ./dist $target
 
-      - name: Listar Conteúdo da Pasta Dist (Debug)
-        run: Get-ChildItem ./dist
+      # --- CORREÇÃO: Instalação Robusta do Inno Setup ---
+      - name: Instalar Inno Setup
+        run: choco install innosetup --no-progress
 
-      - name: Upload Artifact (Disponível no Resumo da Action)
+      - name: Preparar Script de Instalação
+        shell: powershell
+        run: |
+          # Move o script para a raiz se ele estiver na subpasta, para encontrar a pasta 'dist' corretamente
+          if (Test-Path "sistemahotelsantos/setup_script.iss") {
+              Move-Item "sistemahotelsantos/setup_script.iss" "setup_script.iss"
+              Write-Host "Script movido para a raiz."
+          }
+
+      - name: Compilar Instalador (ISCC)
+        shell: powershell
+        run: |
+          # Compila usando o executável padrão do Inno Setup
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup_script.iss
+
+      - name: Listar Arquivos Gerados (Debug)
+        run: |
+          Write-Host "Conteúdo de Output (Instalador):"
+          Get-ChildItem ./Output
+
+      - name: Upload do Instalador (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: SistemaHotel-Windows-Build
-          path: dist/SistemaHotel.exe
-          if-no-files-found: error
+          name: Instalador-SistemaHotel
+          path: Output/*.exe
           retention-days: 5
 
-      - name: Criar Release (Apenas se tiver Tag)
+      - name: Criar Release (Apenas Tags)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/SistemaHotel.exe
+          files: |
+            dist/SistemaHotel.exe
+            Output/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
