@@ -2,10 +2,9 @@ name: Build Windows EXE
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*' # Executa quando uma tag v* é criada
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch: # Permite rodar manualmente na aba Actions
 
 permissions:
   contents: write
@@ -15,60 +14,56 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Baixar código
+      - name: Checkout do Código
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Garante que todo o histórico e tags sejam baixados
 
-      - name: Diagnóstico de Arquivos (Debug)
-        shell: powershell
-        run: |
-          Write-Host "--- Estrutura de Diretórios Atual ---"
-          Get-ChildItem -Recurse | Select-Object FullName
-
-      - name: Configurar Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip' # Otimiza builds futuros
+          cache: 'pip'
 
       - name: Instalar Dependências
-        shell: powershell
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install pyinstaller requests fpdf
 
-      - name: Gerar Executável
+      - name: Verificar Arquivos (Debug)
+        run: Get-ChildItem -Recurse -Filter "*.py"
+
+      - name: Build com PyInstaller
         shell: powershell
         run: |
-          $scriptPath = ""
-          if (Test-Path "sistemahotelsantos/sistema_clientes.py") {
-              $scriptPath = "sistemahotelsantos/sistema_clientes.py"
-          } elseif (Test-Path "sistema_clientes.py") {
-              $scriptPath = "sistema_clientes.py"
+          # Define o caminho do script
+          $target = "sistemahotelsantos/sistema_clientes.py"
+          if (-not (Test-Path $target)) {
+            $target = "sistema_clientes.py"
           }
-
-          if ($scriptPath -ne "") {
-              Write-Host "Iniciando PyInstaller para: $scriptPath"
-              # Adicionada a flag --collect-all se houver dependências ocultas
-              pyinstaller --clean --noconsole --onefile --name="SistemaHotel" $scriptPath
-          } else {
-              Write-Error "ERRO CRÍTICO: O arquivo sistema_clientes.py não foi encontrado em nenhum local esperado."
-              exit 1
+          
+          if (-not (Test-Path $target)) {
+            Write-Error "ERRO: Arquivo sistema_clientes.py não encontrado!"
+            exit 1
           }
+          
+          Write-Host "Compilando arquivo: $target"
+          
+          # --distpath ./dist : Força o executável a ir para a pasta dist na raiz
+          # --workpath ./build : Força arquivos temporários para build na raiz
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --distpath ./dist --workpath ./build $target
 
-      - name: Verificar se EXE foi criado
-        shell: powershell
-        run: |
-          if (Test-Path "dist/SistemaHotel.exe") {
-              Write-Host "Sucesso: dist/SistemaHotel.exe gerado corretamente."
-          } else {
-              Write-Error "ERRO: O PyInstaller finalizou, mas o binário não foi encontrado em dist/."
-              exit 1
-          }
+      - name: Listar Conteúdo da Pasta Dist (Debug)
+        run: Get-ChildItem ./dist
 
-      - name: Publicar Release
-        uses: softprops/action-gh-release@v2 # Atualizado para v2
+      - name: Upload Artifact (Disponível no Resumo da Action)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SistemaHotel-Windows-Build
+          path: dist/SistemaHotel.exe
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Criar Release (Apenas se tiver Tag)
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/SistemaHotel.exe
