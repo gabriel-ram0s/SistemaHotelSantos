@@ -1,3 +1,14 @@
+- name: Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
+          
+      - name: Gerar Instalador MSI
+        run: |
+          # Adicionamos o PYTHONPATH para garantir que o setup.py enxergue as libs
+          $env:PYTHONPATH = "."
+          python setup.py bdist_msi
+
 name: Build Windows MSI Installer
 
 on:
