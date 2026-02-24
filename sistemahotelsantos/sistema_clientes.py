@@ -22,7 +22,7 @@ except ImportError:
 class SistemaCreditos:
     def __init__(self, db_name="hotel.db"):
         self.db_name = db_name
-        self.versao_atual = "1.0.0"  # IMPORTANTE: Mude isso antes de criar a tag no git
+        self.versao_atual = "1.0.1"  # Versão atualizada para teste de build
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
