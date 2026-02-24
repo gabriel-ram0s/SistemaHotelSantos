@@ -1,4 +1,4 @@
-name: Build Windows Installer (Professional Setup)
+name: Build Windows MSI Installer (cx_Freeze)
 
 on:
   push:
@@ -17,69 +17,59 @@ jobs:
       - name: Checkout do Código
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-node@v4 # Opcional se for usar ferramentas JS, mas mantemos focado em Python
-        
       - name: Configurar Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Instalar Dependências Python
+      - name: Instalar Dependências
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller requests fpdf customtkinter tkcalendar matplotlib pyinstaller-hooks-contrib babel
+          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel
 
       - name: Rodar Testes Unitários
         shell: powershell
         run: |
           $testFile = "sistemahotelsantos/test_sistema.py"
           if (-not (Test-Path $testFile)) { $testFile = "test_sistema.py" }
-          if (Test-Path $testFile) {
-              python $testFile
-          } else {
-              Write-Warning "Testes não encontrados. Pulando..."
-          }
+          if (Test-Path $testFile) { python $testFile }
 
-      - name: Gerar Executável (PyInstaller)
+      - name: Gerar Instalador MSI
         shell: powershell
         run: |
-          $target = "sistemahotelsantos/app_gui.py"
-          if (-not (Test-Path $target)) { $target = "app_gui.py" }
-          # --collect-all é vital para o CustomTkinter não quebrar no usuário final
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --collect-all customtkinter --hidden-import babel.numbers --distpath ./dist $target
+          # O comando bdist_msi cria o instalador nativo do Windows
+          python setup.py bdist_msi
 
-      # --- NOVO PASSO: COMPILAÇÃO DO SETUP ---
-      
-      - name: Compilar Instalador (Inno Setup)
-        uses: Codescape-Cloud/Inno-Setup-Action@v1.2.2
-        with:
-          filepath: 'installer.iss'
-
-      - name: Listar Artefatos para Verificação
+      - name: Organizar Artefatos
         shell: powershell
         run: |
-          Write-Host "Verificando Instalador em dist_installer:"
-          Get-ChildItem ./dist_installer
+          mkdir dist_final
+          Move-Item dist/*.msi dist_final/
+
+      - name: Injetar Assinatura Digital (Metadata)
+        shell: powershell
+        run: |
+          $signInfo = "Build-Signature: Gemini-Assisted-Dev-2026`nDeveloped by [Seu Nome] with Gemini"
+          $signInfo | Out-File -FilePath dist_final/signature.txt -Encoding utf8
 
       - name: Upload do Instalador (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: SistemaHotel-FullInstaller
-          path: dist_installer/*.exe
+          name: SistemaHotel-MSI-Installer
+          path: dist_final/
           retention-days: 7
 
-      - name: Criar Release e Upload do Setup
+      - name: Criar Release e Upload do MSI
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            dist_installer/SistemaHotel_Setup.exe
-            dist/SistemaHotel.exe
+            dist_final/*.msi
+            dist_final/signature.txt
           body: |
-            Build automatizada em 2026.
+            Build Windows Nativa (MSI) gerada em 2026.
+            Código de Referência: Versão 2025-12-17.
             Desenvolvido com auxílio de Gemini AI.
-            Versão: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
