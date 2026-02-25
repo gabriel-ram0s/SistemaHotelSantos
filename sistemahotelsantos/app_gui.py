@@ -14,10 +14,21 @@ class AppHotelLTS(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.core = SistemaCreditos()
-        self.title("Hotel Santos - Gestao de Creditos v4.2.8")
+        self.title("Hotel Santos - Gestao de Creditos v4.2.9")
         self.geometry("1200x850")
         self.minsize(1024, 768) # Garante um tamanho mínimo para não quebrar o layout
         self.after(0, lambda: self.state('zoomed')) # Inicia maximizado no Windows
+        # Configuração do Ícone da Janela (Runtime)
+        # O PyInstaller com --onefile descompacta em sys._MEIPASS
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "app.ico")
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
+            else:
+                # Tenta buscar na raiz se estiver rodando via script ou onefile raiz
+                self.iconbitmap("app.ico")
+        except:
+            pass
         
         # Carrega tema salvo (0=Light, 1=Dark)
         ctk.set_appearance_mode("Dark" if self.core.get_config('tema') == 1 else "Light")
@@ -133,6 +144,70 @@ class AppHotelLTS(ctk.CTk):
         self.main_frame.grid_rowconfigure(0, weight=1)
 
     # =========================================================================
+    # 1.5. AUTO-UPDATE
+    # =========================================================================
+    def verificar_e_notificar_update(self):
+        """Verifica se há atualizações em uma thread separada e notifica o usuário."""
+        def _task():
+            try:
+                # Apenas verifica se estiver rodando o executável compilado
+                if not getattr(sys, 'frozen', False):
+                    print("INFO: Verificação de update pulada (rodando como script).")
+                    return
+
+                tem_update, nova_versao, url = self.core.verificar_atualizacao()
+                if tem_update:
+                    # Agendamos a chamada do messagebox na thread principal
+                    self.after(0, self.propor_atualizacao, nova_versao, url)
+            except Exception as e:
+                print(f"Erro ao verificar atualização: {e}") # Log silencioso no console
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def propor_atualizacao(self, nova_versao, url):
+        """Mostra um messagebox para o usuário e inicia o download se aceito."""
+        if messagebox.askyesno("Atualização Disponível", 
+                               f"Uma nova versão ({nova_versao}) está disponível!\n"
+                               "Deseja baixar e instalar agora?\n\n"
+                               "O aplicativo será reiniciado."):
+            self.iniciar_janela_de_progresso(url)
+
+    def iniciar_janela_de_progresso(self, url):
+        """Cria a janela de progresso e inicia o download."""
+        janela_progresso = ctk.CTkToplevel(self)
+        janela_progresso.title("Atualizando...")
+        janela_progresso.geometry("400x150")
+        janela_progresso.transient(self)
+        janela_progresso.lift()
+        janela_progresso.grab_set()
+        janela_progresso.protocol("WM_DELETE_WINDOW", lambda: None) # Impede de fechar
+
+        ctk.CTkLabel(janela_progresso, text="Baixando nova versão, por favor aguarde...", font=("Arial", 14)).pack(pady=20)
+        
+        progress_bar = ctk.CTkProgressBar(janela_progresso, width=350)
+        progress_bar.pack(pady=10)
+        progress_bar.set(0)
+
+        lbl_status = ctk.CTkLabel(janela_progresso, text="Iniciando download...")
+        lbl_status.pack(pady=5)
+
+        def update_callback(progress, status=None):
+            progress_bar.set(progress)
+            if status == "finalizando":
+                lbl_status.configure(text="Atualização baixada! Reiniciando o aplicativo...")
+            else:
+                lbl_status.configure(text=f"{int(progress * 100)}%")
+        
+        def download_task():
+            try:
+                nome_executavel = os.path.basename(sys.executable)
+                self.core.aplicar_atualizacao(url, nome_executavel, progress_callback=lambda p, s=None: self.after(0, update_callback, p, s))
+            except Exception as e:
+                self.after(0, lambda: [janela_progresso.destroy(), messagebox.showerror("Erro de Atualização", f"Não foi possível concluir a atualização:\n{e}")])
+
+        threading.Thread(target=download_task, daemon=True).start()
+
+    # =========================================================================
     # 2. AUTENTICAÇÃO
     # =========================================================================
     def logout(self):
@@ -162,6 +237,7 @@ class AppHotelLTS(ctk.CTk):
                 self.sidebar.pack(side="left", fill="y")
                 self.main_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
                 self.tela_home()
+                self.verificar_e_notificar_update()
             else:
                 messagebox.showerror("Erro", "Credenciais inválidas")
                 
@@ -477,146 +553,231 @@ class AppHotelLTS(ctk.CTk):
         self.current_screen_kwargs = {}
         self.limpar_tela()
 
-        nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=10)
+        # Navegação Superior
+        nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkLabel(nav, text="REGISTRO DE COMPRAS", font=("Arial", 18, "bold"), text_color="#e67e22").pack(side="left", padx=20)
-        ctk.CTkButton(nav, text="💬 Enviar WhatsApp", fg_color="#25D366", width=140, command=self.enviar_whatsapp_compras).pack(side="right", padx=5)
-        ctk.CTkButton(nav, text="📄 Exportar PDF", fg_color="#2c3e50", width=120, command=self.exportar_pdf_compras).pack(side="right", padx=5)
+        ctk.CTkLabel(nav, text="GESTÃO DE COMPRAS (ORDENS)", font=("Arial", 18, "bold"), text_color="#e67e22").pack(side="left", padx=20)
 
-        # Formulário de Entrada
-        form = ctk.CTkFrame(self.main_frame); form.pack(fill="x", padx=10, pady=5)
+        # Layout Dividido: Esquerda (Listas) | Direita (Itens da Lista)
+        paned = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        paned.pack(fill="both", expand=True, padx=10, pady=5)
         
-        ctk.CTkLabel(form, text="Data (dd/mm/aaaa):").grid(row=0, column=0, padx=5, pady=5)
-        self.e_data_compras = ctk.CTkEntry(form, width=100); self.e_data_compras.grid(row=1, column=0, padx=5, pady=5)
-        self.e_data_compras.insert(0, datetime.now().strftime("%d/%m/%Y"))
+        # --- ESQUERDA: LISTAS DE COMPRAS ---
+        frame_listas = ctk.CTkFrame(paned, width=350)
+        frame_listas.pack(side="left", fill="y", padx=(0, 10))
+        frame_listas.pack_propagate(False)
 
-        ctk.CTkLabel(form, text="Produto:").grid(row=0, column=1, padx=5, pady=5)
+        ctk.CTkLabel(frame_listas, text="Minhas Listas / Ordens", font=("Arial", 14, "bold")).pack(pady=10)
+        ctk.CTkButton(frame_listas, text="+ Nova Lista", fg_color=self.colors["verde"], command=self.criar_nova_lista).pack(pady=5, padx=10, fill="x")
+
+        # Treeview Listas
+        cols_l = ("ID", "Data", "Status", "Total")
+        self.tree_listas = ttk.Treeview(frame_listas, columns=cols_l, show='headings')
+        self.tree_listas.heading("ID", text="#"); self.tree_listas.column("ID", width=40, anchor="center")
+        self.tree_listas.heading("Data", text="Data"); self.tree_listas.column("Data", width=80, anchor="center")
+        self.tree_listas.heading("Status", text="Status"); self.tree_listas.column("Status", width=80, anchor="center")
+        self.tree_listas.heading("Total", text="Valor"); self.tree_listas.column("Total", width=80, anchor="e")
+        self.tree_listas.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Configuração da Busca Estilo Google (Entry + Listbox)
+        self.tree_listas.bind("<<TreeviewSelect>>", self.carregar_lista_selecionada)
+
+        # --- DIREITA: DETALHES DA LISTA ---
+        self.frame_detalhes = ctk.CTkFrame(paned)
+        self.frame_detalhes.pack(side="right", fill="both", expand=True)
+        
+        # Header Detalhes
+        self.lbl_titulo_lista = ctk.CTkLabel(self.frame_detalhes, text="Selecione uma lista para visualizar", font=("Arial", 16, "bold"))
+        self.lbl_titulo_lista.pack(pady=10)
+        
+        self.frame_acoes_lista = ctk.CTkFrame(self.frame_detalhes, fg_color="transparent")
+        self.frame_acoes_lista.pack(fill="x", padx=10)
+        
+        self.btn_fechar_lista = ctk.CTkButton(self.frame_acoes_lista, text="🔒 Fechar Lista", fg_color=self.colors["vermelho"], width=120, command=self.fechar_lista_atual)
+        self.btn_imprimir_lista = ctk.CTkButton(self.frame_acoes_lista, text="📄 Imprimir PDF", fg_color="#2c3e50", width=120, command=self.imprimir_lista_atual)
+        # Botões iniciam ocultos
+
+        # Formulário de Adição de Item (Só aparece se lista ABERTA)
+        self.frame_add_item = ctk.CTkFrame(self.frame_detalhes, border_width=1, border_color="#555")
+        
+        ctk.CTkLabel(self.frame_add_item, text="Adicionar Item à Lista:", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", padx=10, pady=5)
+        
+        # Campos do formulário
         self.lista_produtos_cache = self.core.get_produtos_predefinidos()
-        self.e_prod_compras = ctk.CTkEntry(form, width=250, placeholder_text="Digite para buscar...")
-        self.e_prod_compras.grid(row=1, column=1, padx=5, pady=5)
+        self.e_prod_compras = ctk.CTkEntry(self.frame_add_item, width=200, placeholder_text="Produto (Busca...)")
+        self.e_prod_compras.grid(row=1, column=0, padx=5, pady=5)
         
-        # Listbox para sugestões (inicialmente oculta)
-        # Cores adaptadas para o tema (simples)
+        # Configuração da Busca (Copiada da versão anterior)
         bg_list = "#333333" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
         fg_list = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
-        
         self.lb_sugestoes = Listbox(self.main_frame, width=40, height=5, bg=bg_list, fg=fg_list, selectbackground=self.colors["verde"], selectforeground="white", borderwidth=1, relief="solid")
         
         def autocomplete_prod(event):
-            # Teclas de navegação não devem acionar o filtro
             if event.keysym in ['Down', 'Up', 'Return', 'Tab']: return
-            
             typed = self.e_prod_compras.get()
-            if not typed:
-                self.lb_sugestoes.place_forget()
-                return
-            
+            if not typed: self.lb_sugestoes.place_forget(); return
             filtered = [p for p in self.lista_produtos_cache if typed.lower() in p.lower()]
-            
             if filtered:
                 self.lb_sugestoes.delete(0, 'end')
-                for item in filtered:
-                    self.lb_sugestoes.insert('end', item)
-                # Posiciona a lista logo abaixo do Entry
-                self.lb_sugestoes.place(in_=self.e_prod_compras, x=0, rely=1.0, relwidth=1.0)
-                self.lb_sugestoes.lift()
-            else:
-                self.lb_sugestoes.place_forget()
+                for item in filtered: self.lb_sugestoes.insert('end', item)
+                self.lb_sugestoes.place(in_=self.e_prod_compras, x=0, rely=1.0, relwidth=1.0); self.lb_sugestoes.lift()
+            else: self.lb_sugestoes.place_forget()
 
         def selecionar_sugestao(event=None):
             if self.lb_sugestoes.curselection():
                 item = self.lb_sugestoes.get(self.lb_sugestoes.curselection())
-                self.e_prod_compras.delete(0, 'end')
-                self.e_prod_compras.insert(0, item)
-                self.lb_sugestoes.place_forget()
-                self.e_prod_compras.focus_set()
-                # Opcional: Pular para o próximo campo (Qtd)
-                e_qtd.focus_set()
-
-        def navegar_lista(event):
-            if self.lb_sugestoes.winfo_ismapped():
-                self.lb_sugestoes.focus_set()
-                self.lb_sugestoes.selection_set(0)
+                self.e_prod_compras.delete(0, 'end'); self.e_prod_compras.insert(0, item)
+                self.lb_sugestoes.place_forget(); self.e_prod_compras.focus_set(); self.e_qtd_compras.focus_set()
 
         self.e_prod_compras.bind("<KeyRelease>", autocomplete_prod)
-        self.e_prod_compras.bind("<Down>", navegar_lista)
-        self.lb_sugestoes.bind("<Return>", selecionar_sugestao)
-        self.lb_sugestoes.bind("<Button-1>", selecionar_sugestao)
-        # Fecha a lista se clicar fora (simplificado: fecha ao sair do campo)
-        # self.e_prod_compras.bind("<FocusOut>", lambda e: self.after(200, self.lb_sugestoes.place_forget)) 
+        self.lb_sugestoes.bind("<Return>", selecionar_sugestao); self.lb_sugestoes.bind("<Button-1>", selecionar_sugestao)
 
-        ctk.CTkLabel(form, text="Qtd:").grid(row=0, column=2, padx=5, pady=5)
-        e_qtd = ctk.CTkEntry(form, width=80); e_qtd.grid(row=1, column=2, padx=5, pady=5)
+        self.e_qtd_compras = ctk.CTkEntry(self.frame_add_item, width=70, placeholder_text="Qtd")
+        self.e_qtd_compras.grid(row=1, column=1, padx=5)
+        
+        self.e_val_compras = ctk.CTkEntry(self.frame_add_item, width=90, placeholder_text="Valor Unit.")
+        self.e_val_compras.grid(row=1, column=2, padx=5)
+        
+        ctk.CTkButton(self.frame_add_item, text="Adicionar", width=80, fg_color=self.colors["verde"], command=self.adicionar_item_lista).grid(row=1, column=3, padx=10)
+        
+        # Binds de Enter
+        self.e_prod_compras.bind("<Return>", lambda e: selecionar_sugestao() if self.lb_sugestoes.winfo_ismapped() else self.adicionar_item_lista())
+        self.e_qtd_compras.bind("<Return>", lambda e: self.adicionar_item_lista())
+        self.e_val_compras.bind("<Return>", lambda e: self.adicionar_item_lista())
 
-        ctk.CTkLabel(form, text="Valor Unit. (R$):").grid(row=0, column=3, padx=5, pady=5)
-        e_val = ctk.CTkEntry(form, width=100); e_val.grid(row=1, column=3, padx=5, pady=5)
+        # Treeview Itens
+        cols_i = ("Prod", "Qtd", "Unit", "Total", "Var")
+        self.tree_itens = ttk.Treeview(self.frame_detalhes, columns=cols_i, show='headings')
+        self.tree_itens.heading("Prod", text="Produto"); self.tree_itens.column("Prod", width=200)
+        self.tree_itens.heading("Qtd", text="Qtd"); self.tree_itens.column("Qtd", width=50, anchor="center")
+        self.tree_itens.heading("Unit", text="Unit (R$)"); self.tree_itens.column("Unit", width=80, anchor="e")
+        self.tree_itens.heading("Total", text="Total (R$)"); self.tree_itens.column("Total", width=80, anchor="e")
+        self.tree_itens.heading("Var", text="Var"); self.tree_itens.column("Var", width=60, anchor="center")
+        self.tree_itens.pack(fill="both", expand=True, padx=10, pady=10)
+        self.configurar_tags_tabela(self.tree_itens)
 
-        def add_compra():
+        # Inicialização
+        self.lista_selecionada_id = None
+        self.lista_selecionada_status = None
+        self.atualizar_lista_de_listas()
+
+    def atualizar_lista_de_listas(self):
+        self.tree_listas.delete(*self.tree_listas.get_children())
+        listas = self.core.get_listas_resumo()
+        for l in listas:
+            data_br = datetime.strptime(l['data_criacao'], "%Y-%m-%d").strftime("%d/%m/%Y")
+            total = l['total_valor'] if l['total_valor'] else 0.0
+            self.tree_listas.insert("", "end", values=(l['id'], data_br, l['status'], f"R$ {total:.2f}"))
+
+    def criar_nova_lista(self):
+        try:
+            lid = self.core.criar_lista_compras(self.current_user['username'])
+            self.atualizar_lista_de_listas()
+            # Seleciona a nova lista automaticamente (último item, pois a query ordena DESC, mas treeview insere no fim por padrão, vamos achar pelo ID)
+            # Como a query é DESC, o novo é o primeiro da lista de dados, então é o primeiro no treeview se inserirmos na ordem
+            # Mas vamos simplificar: recarrega e seleciona o topo
+            child_id = self.tree_listas.get_children()[0]
+            self.tree_listas.selection_set(child_id)
+            self.tree_listas.focus(child_id)
+            self.carregar_lista_selecionada(None)
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
+
+    def carregar_lista_selecionada(self, event):
+        sel = self.tree_listas.selection()
+        if not sel: return
+        
+        item = self.tree_listas.item(sel[0])
+        lid, data, status, total = item['values']
+        self.lista_selecionada_id = lid
+        self.lista_selecionada_status = status
+        
+        self.lbl_titulo_lista.configure(text=f"Lista #{lid} - {status} ({data})")
+        
+        # Controle de Visibilidade dos Botões e Form
+        if status == "ABERTA":
+            self.frame_add_item.pack(fill="x", padx=10, pady=5, after=self.frame_acoes_lista)
+            self.btn_fechar_lista.pack(side="left", padx=5)
+            self.btn_imprimir_lista.pack(side="left", padx=5)
+        else:
+            self.frame_add_item.pack_forget()
+            self.btn_fechar_lista.pack_forget()
+            self.btn_imprimir_lista.pack(side="left", padx=5) # Imprimir sempre disponível
+            
+        self.atualizar_itens_lista()
+
+    def atualizar_itens_lista(self):
+        self.tree_itens.delete(*self.tree_itens.get_children())
+        if not self.lista_selecionada_id: return
+        
+        itens = self.core.get_itens_lista(self.lista_selecionada_id)
+        for i in itens:
+            seta = "-"
+            tag_seta = "even"
+            if i.get('tendencia') == 'subiu': seta = "▲"; tag_seta = "seta_subiu"
+            elif i.get('tendencia') == 'desceu': seta = "▼"; tag_seta = "seta_desceu"
+            
+            self.tree_itens.insert("", "end", values=(i['produto'], i['quantidade'], f"{i['valor_unitario']:.2f}", f"{i['valor_total']:.2f}", seta), tags=(tag_seta,))
+
+    def adicionar_item_lista(self):
+        if not self.lista_selecionada_id or self.lista_selecionada_status != "ABERTA": return
+        
+        try:
+            raw_prod = self.e_prod_compras.get()
+            qtd = self.e_qtd_compras.get()
+            val = self.e_val_compras.get()
+            
+            if not raw_prod or not qtd or not val: raise Exception("Preencha todos os campos.")
+            
+            prod_digitado = raw_prod.upper().strip()
+            # Validação de produto existente
+            produtos_existentes = [p.upper() for p in self.lista_produtos_cache]
+            if prod_digitado not in produtos_existentes:
+                raise Exception("Produto não cadastrado! Cadastre-o primeiro em Ajustes.")
+
+            # Adiciona
+            self.core.adicionar_compra(
+                datetime.now().strftime("%d/%m/%Y"), 
+                prod_digitado, qtd, val, 
+                usuario=self.current_user['username'], 
+                lista_id=self.lista_selecionada_id
+            )
+            
+            # Limpa e Atualiza
+            self.e_prod_compras.delete(0, 'end'); self.e_qtd_compras.delete(0, 'end'); self.e_val_compras.delete(0, 'end')
+            self.e_prod_compras.focus()
+            self.lb_sugestoes.place_forget()
+            
+            self.atualizar_itens_lista()
+            self.atualizar_lista_de_listas() # Para atualizar o total na esquerda
+            
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
+
+    def fechar_lista_atual(self):
+        if not self.lista_selecionada_id: return
+        if messagebox.askyesno("Confirmar", "Deseja fechar esta lista? Ela não poderá mais ser editada."):
+            self.core.fechar_lista_compras(self.lista_selecionada_id)
+            self.atualizar_lista_de_listas()
+            # Recarrega a seleção para atualizar a UI (esconder form)
+            # Precisamos achar o item no treeview novamente
+            for item in self.tree_listas.get_children():
+                if self.tree_listas.item(item)['values'][0] == self.lista_selecionada_id:
+                    self.tree_listas.selection_set(item)
+                    self.carregar_lista_selecionada(None)
+                    break
+
+    def imprimir_lista_atual(self):
+        if not self.lista_selecionada_id: return
+        self.configure(cursor="watch")
+        def _task():
             try:
-                raw_prod = self.e_prod_compras.get()
-                if not raw_prod or not e_qtd.get() or not e_val.get():
-                    raise Exception("Preencha todos os campos.")
-                
-                prod_digitado = raw_prod.upper().strip()
-
-                # Verifica se o produto existe na lista de produtos cadastrados
-                produtos_existentes = [p.upper() for p in self.lista_produtos_cache]
-                if prod_digitado not in produtos_existentes:
-                    raise Exception("Produto não cadastrado! Cadastre-o primeiro no menu Ajustes > Produtos.")
-
-                self.core.adicionar_compra(self.e_data_compras.get(), prod_digitado, e_qtd.get(), e_val.get(), usuario=self.current_user['username'])
-                
-                atualizar_tabela()
-                self.e_prod_compras.delete(0, 'end'); e_qtd.delete(0, 'end'); e_val.delete(0, 'end'); self.e_prod_compras.focus()
-                self.lb_sugestoes.place_forget()
+                f = self.core.gerar_pdf_lista(self.lista_selecionada_id)
+                self.after(0, lambda: messagebox.showinfo("Sucesso", f"PDF Gerado: {f}"))
             except Exception as e:
-                messagebox.showerror("Erro", str(e))
-
-        # Bind do Enter para adicionar
-        def on_enter_prod(event):
-            # Se a lista estiver visível e algo selecionado, o Enter seleciona a sugestão
-            # Caso contrário, tenta adicionar a compra
-            if self.lb_sugestoes.winfo_ismapped() and self.lb_sugestoes.curselection():
-                selecionar_sugestao()
-            else:
-                add_compra()
-
-        self.e_prod_compras.bind("<Return>", on_enter_prod)
-        e_qtd.bind("<Return>", lambda e: add_compra())
-        e_val.bind("<Return>", lambda e: add_compra())
-
-        ctk.CTkButton(form, text="Adicionar", fg_color=self.colors["verde"], command=add_compra).grid(row=1, column=4, padx=10, pady=5)
-
-        # Tabela de Histórico
-        ctk.CTkLabel(self.main_frame, text="Histórico de Compras", font=("Arial", 12, "bold")).pack(pady=(15,5))
-        
-        cols = ("Data", "Produto", "Qtd", "Unitário", "Total", "Tendência")
-        tree = ttk.Treeview(self.main_frame, columns=cols, show='headings')
-        
-        tree.heading("Data", text="Data"); tree.column("Data", width=100, anchor="center")
-        tree.heading("Produto", text="Produto"); tree.column("Produto", width=300)
-        tree.heading("Qtd", text="Qtd"); tree.column("Qtd", width=80, anchor="center")
-        tree.heading("Unitário", text="Unitário (R$)"); tree.column("Unitário", width=100, anchor="center")
-        tree.heading("Total", text="Total (R$)"); tree.column("Total", width=100, anchor="center")
-        tree.heading("Tendência", text="Variação"); tree.column("Tendência", width=80, anchor="center")
-        
-        tree.pack(fill="both", expand=True, padx=10, pady=10)
-        self.configurar_tags_tabela(tree)
-
-        def atualizar_tabela():
-            tree.delete(*tree.get_children())
-            for i, c in enumerate(self.core.get_historico_compras()):
-                data_br = datetime.strptime(c['data_compra'], "%Y-%m-%d").strftime("%d/%m/%Y")
-                seta = "➖"
-                tag_seta = "even"
-                if c['tendencia'] == 'subiu': seta = "▲ Subiu"; tag_seta = "seta_subiu"
-                elif c['tendencia'] == 'desceu': seta = "▼ Caiu"; tag_seta = "seta_desceu"
-                
-                tree.insert("", "end", values=(data_br, c['produto'], f"{c['quantidade']}", f"{c['valor_unitario']:.2f}", f"{c['valor_total']:.2f}", seta), tags=(tag_seta,))
-        
-        atualizar_tabela()
+                self.after(0, lambda: messagebox.showerror("Erro", str(e)))
+            finally:
+                self.after(0, lambda: self.configure(cursor="arrow"))
+        threading.Thread(target=_task, daemon=True).start()
 
     def exportar_pdf_compras(self):
         self.configure(cursor="watch")

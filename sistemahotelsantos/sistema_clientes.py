@@ -22,7 +22,7 @@ except ImportError:
 class SistemaCreditos:
     def __init__(self, db_name="hotel.db"):
         self.db_name = db_name
-        self.versao_atual = "1.0.2"  # Versão estável (apenas EXE)
+        self.versao_atual = "4.2.9"  # Versão estável (apenas EXE)
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
@@ -63,6 +63,12 @@ class SistemaCreditos:
                                     valor_total REAL,
                                     usuario TEXT,
                                     obs TEXT)''')
+            self.cursor.execute('''CREATE TABLE IF NOT EXISTS listas_compras (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    data_criacao TEXT,
+                                    status TEXT DEFAULT 'ABERTA',
+                                    usuario TEXT,
+                                    obs TEXT)''')
             self.cursor.execute('CREATE TABLE IF NOT EXISTS produtos (nome TEXT PRIMARY KEY)')
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('validade_meses', 6))
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('alerta_dias', 30))
@@ -100,6 +106,20 @@ class SistemaCreditos:
             try:
                 self.cursor.execute("ALTER TABLE historico_zebra ADD COLUMN quarto TEXT")
             except sqlite3.OperationalError: pass
+            
+            # MIGRATION: Adiciona coluna lista_id em compras
+            try:
+                self.cursor.execute("ALTER TABLE compras ADD COLUMN lista_id INTEGER")
+            except sqlite3.OperationalError: pass
+
+            # MIGRATION: Agrupa compras antigas (sem lista) em uma lista legado
+            self.cursor.execute("SELECT 1 FROM compras WHERE lista_id IS NULL LIMIT 1")
+            if self.cursor.fetchone():
+                data_hj = datetime.now().strftime("%Y-%m-%d")
+                self.cursor.execute("INSERT INTO listas_compras (data_criacao, status, usuario, obs) VALUES (?, ?, ?, ?)", 
+                                   (data_hj, 'FECHADA', 'Sistema', 'Legado / Importado de Versão Anterior'))
+                lid = self.cursor.lastrowid
+                self.cursor.execute("UPDATE compras SET lista_id = ? WHERE lista_id IS NULL", (lid,))
 
             # Popula categorias padrão se a tabela estiver vazia
             self.cursor.execute("SELECT 1 FROM categorias")
@@ -536,7 +556,7 @@ class SistemaCreditos:
     # =========================================================================
     # MÓDULO COMPRAS
     # =========================================================================
-    def adicionar_compra(self, data_compra, produto, qtd, valor_unit, obs="", usuario="Sistema"):
+    def adicionar_compra(self, data_compra, produto, qtd, valor_unit, obs="", usuario="Sistema", lista_id=None):
         qtd_float = self.limpar_valor(qtd)
         unit_float = self.limpar_valor(valor_unit)
         total = qtd_float * unit_float
@@ -548,9 +568,46 @@ class SistemaCreditos:
             data_iso = datetime.now().strftime("%Y-%m-%d")
 
         with self.conn:
-            self.cursor.execute("INSERT INTO compras (data_compra, produto, quantidade, valor_unitario, valor_total, usuario, obs) VALUES (?,?,?,?,?,?,?)",
-                               (data_iso, produto.upper().strip(), qtd_float, unit_float, total, usuario, obs))
+            self.cursor.execute("INSERT INTO compras (data_compra, produto, quantidade, valor_unitario, valor_total, usuario, obs, lista_id) VALUES (?,?,?,?,?,?,?,?)",
+                               (data_iso, produto.upper().strip(), qtd_float, unit_float, total, usuario, obs, lista_id))
         self.registrar_log(usuario, "ADD_COMPRA", f"Prod: {produto} | Total: {total}")
+
+    def criar_lista_compras(self, usuario, obs=""):
+        data_hj = datetime.now().strftime("%Y-%m-%d")
+        with self.conn:
+            self.cursor.execute("INSERT INTO listas_compras (data_criacao, status, usuario, obs) VALUES (?, ?, ?, ?)", 
+                               (data_hj, 'ABERTA', usuario, obs))
+            return self.cursor.lastrowid
+
+    def fechar_lista_compras(self, lista_id):
+        with self.conn:
+            self.cursor.execute("UPDATE listas_compras SET status = 'FECHADA' WHERE id = ?", (lista_id,))
+
+    def get_listas_resumo(self):
+        """Retorna listas com totais calculados"""
+        query = '''
+            SELECT l.id, l.data_criacao, l.status, l.usuario, COUNT(c.id) as qtd_itens, SUM(c.valor_total) as total_valor
+            FROM listas_compras l
+            LEFT JOIN compras c ON l.id = c.lista_id
+            GROUP BY l.id
+            ORDER BY l.id DESC
+        '''
+        self.cursor.execute(query)
+        return [dict(r) for r in self.cursor.fetchall()]
+
+    def get_itens_lista(self, lista_id):
+        self.cursor.execute("SELECT * FROM compras WHERE lista_id = ? ORDER BY id DESC", (lista_id,))
+        itens = [dict(r) for r in self.cursor.fetchall()]
+        # Calcula tendência
+        for c in itens:
+            self.cursor.execute("SELECT valor_unitario FROM compras WHERE produto = ? AND data_compra < ? ORDER BY data_compra DESC LIMIT 1", (c['produto'], c['data_compra']))
+            res = self.cursor.fetchone()
+            c['tendencia'] = "igual"
+            if res:
+                antigo = res['valor_unitario']
+                if c['valor_unitario'] > antigo: c['tendencia'] = "subiu"
+                elif c['valor_unitario'] < antigo: c['tendencia'] = "desceu"
+        return itens
 
     def get_historico_compras(self, filtro=""):
         query = "SELECT * FROM compras"
@@ -587,6 +644,55 @@ class SistemaCreditos:
     def get_produtos_predefinidos(self):
         self.cursor.execute("SELECT nome FROM produtos ORDER BY nome")
         return [r['nome'] for r in self.cursor.fetchall()]
+
+    def gerar_pdf_lista(self, lista_id):
+        if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
+        
+        self.cursor.execute("SELECT * FROM listas_compras WHERE id = ?", (lista_id,))
+        lista = self.cursor.fetchone()
+        if not lista: raise Exception("Lista não encontrada.")
+        
+        itens = self.get_itens_lista(lista_id)
+        
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, self.empresa["nome"], ln=True, align='C')
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, f"ORDEM DE COMPRA #{lista['id']}", ln=True, align='C')
+        pdf.ln(5)
+        
+        pdf.set_font("Arial", 'B', 10)
+        data_lista = datetime.strptime(lista['data_criacao'], "%Y-%m-%d").strftime("%d/%m/%Y")
+        pdf.cell(0, 5, f"DATA: {data_lista} | STATUS: {lista['status']} | RESP: {lista['usuario']}", ln=True)
+        pdf.ln(5)
+        
+        # Header Tabela
+        pdf.set_fill_color(220, 220, 220)
+        pdf.cell(80, 8, "PRODUTO", 1, 0, 'C', 1)
+        pdf.cell(20, 8, "QTD", 1, 0, 'C', 1)
+        pdf.cell(30, 8, "UNIT (R$)", 1, 0, 'C', 1)
+        pdf.cell(30, 8, "TOTAL (R$)", 1, 0, 'C', 1)
+        pdf.cell(0, 8, "OBS", 1, 1, 'C', 1)
+        
+        pdf.set_font("Arial", '', 9)
+        total_geral = 0
+        for i in itens:
+            pdf.cell(80, 8, i['produto'][:35], 1, 0, 'L')
+            pdf.cell(20, 8, str(i['quantidade']), 1, 0, 'C')
+            pdf.cell(30, 8, f"{i['valor_unitario']:.2f}", 1, 0, 'R')
+            pdf.cell(30, 8, f"{i['valor_total']:.2f}", 1, 0, 'R')
+            pdf.cell(0, 8, "", 1, 1, 'C') # Obs vazio para check manual
+            total_geral += i['valor_total']
+            
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, f"TOTAL DA LISTA: R$ {total_geral:.2f}", ln=True, align='R')
+        
+        fname = f"Ordem_Compra_{lista_id}.pdf"
+        try: pdf.output(fname)
+        except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
+        return fname
 
     def gerar_pdf_compras(self):
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
@@ -785,7 +891,7 @@ class SistemaCreditos:
             print(f"Erro ao verificar update: {e}")
             return False, None, None
 
-    def aplicar_atualizacao(self, url_download, nome_executavel="SistemaHotel.exe"):
+    def aplicar_atualizacao(self, url_download, nome_executavel="SistemaHotel.exe", progress_callback=None):
         """
         Baixa o novo executável e cria um script .bat para substituir o atual.
         """
@@ -793,14 +899,24 @@ class SistemaCreditos:
         
         try:
             # 1. Baixar o novo arquivo como 'update_temp.exe'
-            r = requests.get(url_download, stream=True)
+            r = requests.get(url_download, stream=True, timeout=15)
+            r.raise_for_status()
+            
+            total_size = int(r.headers.get('content-length', 0))
+            downloaded_size = 0
+            
             with open("update_temp.exe", 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+                    downloaded_size += len(chunk)
+                    if progress_callback and total_size > 0:
+                        progress = downloaded_size / total_size
+                        progress_callback(progress)
             
             # 2. Criar script BAT para fazer a troca (pois não podemos deletar o exe em execução)
             bat_script = f"""
             @echo off
+            echo Atualizando o sistema... Por favor, aguarde.
             timeout /t 2 /nobreak > NUL
             del "{nome_executavel}"
             ren "update_temp.exe" "{nome_executavel}"
@@ -811,6 +927,9 @@ class SistemaCreditos:
                 bat.write(bat_script)
             
             # 3. Executar o BAT e fechar o programa atual
+            if progress_callback:
+                progress_callback(1.0, "finalizando") # Sinaliza o fim para a GUI
+
             subprocess.Popen("updater.bat", shell=True)
             sys.exit(0)
             
