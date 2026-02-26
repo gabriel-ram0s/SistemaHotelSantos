@@ -256,7 +256,7 @@ class AppHotelLTS(ctk.CTk):
         self.limpar_tela()
         ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Times New Roman", 28, "bold"), text_color=self.colors["verde"]).pack(pady=60)
         grid = ctk.CTkFrame(self.main_frame, fg_color="transparent"); grid.pack()
-        btns = [("📊 DASHBOARD", self.tela_dash, self.colors["verde"]), ("👥 HÓSPEDES", self.tela_hospedes, self.colors["verde"]),
+        btns = [("👥 HÓSPEDES", self.tela_hospedes, self.colors["verde"]),
                 ("💰 FINANCEIRO", self.tela_financeiro, self.colors["dourado"]), ("🛒 COMPRAS", self.tela_compras, "#e67e22"), ("⚙️ AJUSTES", self.tela_config, "#7f8c8d")]
         for i, (t, c, col) in enumerate(btns):
             ctk.CTkButton(grid, text=t, width=250, height=90, command=c, fg_color=col, font=("Arial", 14, "bold")).grid(row=i//2, column=i%2, padx=20, pady=20)
@@ -277,7 +277,6 @@ class AppHotelLTS(ctk.CTk):
 
         self.ent_busca = ctk.CTkEntry(self.main_frame, placeholder_text="Pesquisar por nome ou documento...", width=500)
         self.ent_busca.pack(pady=10)
-        self.ent_busca.bind("<KeyRelease>", lambda e: self.atualizar_lista_hospedes(filtro))
         self.ent_busca.bind("<KeyRelease>", lambda e: self.agendar_busca(filtro))
 
         self.tree_h = ttk.Treeview(self.main_frame, columns=("N", "D", "S"), show='headings')
@@ -832,21 +831,42 @@ class AppHotelLTS(ctk.CTk):
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=10)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
         ctk.CTkLabel(nav, text="CENTRAL FINANCEIRA", font=("Arial", 18, "bold"), text_color=self.colors["verde"]).pack(side="left", padx=20)
+        
+        def acao_exportar():
+            dialog = ctk.CTkInputDialog(text="Digite o Mês/Ano (MM/AAAA) para filtrar\nou deixe vazio para exportar TUDO:", title="Exportar Relatório")
+            mes = dialog.get_input()
+            # Se o usuário cancelar (None), não faz nada. Se for vazio (""), exporta tudo.
+            if mes is not None:
+                arquivo = self.core.exportar_historico_financeiro_csv(mes.strip() if mes.strip() else None)
+                messagebox.showinfo("Exportado", f"Relatório salvo em:\n{arquivo}")
+
+        def acao_fechamento():
+            dialog = ctk.CTkInputDialog(text="Digite a Data (DD/MM/AAAA) para o fechamento\n(Deixe vazio para HOJE):", title="Fechamento de Caixa")
+            data_str = dialog.get_input()
+            if data_str is not None:
+                try:
+                    data_iso = datetime.strptime(data_str, "%d/%m/%Y").strftime("%Y-%m-%d") if data_str.strip() else datetime.now().strftime("%Y-%m-%d")
+                    arquivo = self.core.gerar_pdf_fechamento(data_iso)
+                    messagebox.showinfo("Sucesso", f"Relatório gerado:\n{arquivo}")
+                except Exception as e: messagebox.showerror("Erro", str(e))
+
+        ctk.CTkButton(nav, text="🖨️ Fechamento Dia", width=140, fg_color="#2c3e50", command=acao_fechamento).pack(side="right", padx=5)
+        ctk.CTkButton(nav, text="📥 Exportar Extrato", width=160, fg_color=self.colors["verde"], command=acao_exportar).pack(side="right", padx=5)
         ctk.CTkButton(nav, text="+ Novo Lançamento", width=160, fg_color=self.colors["dourado"], hover_color=self.colors["dourado_hover"], command=self.janela_novo_lancamento_central).pack(side="right")
 
         # Sistema de Abas
         tabview = ctk.CTkTabview(self.main_frame)
         tabview.pack(fill="both", expand=True, padx=10, pady=5)
-        tabview.add("Extrato Global")
-        tabview.add("Controle de Inadimplência (Multas)")
+        tab_creditos = tabview.add("Extrato de Créditos")
+        tab_multas_hist = tabview.add("Histórico de Multas")
+        tab_inadimplencia = tabview.add("Inadimplência (Resumo)")
 
-        # --- ABA 1: EXTRATO GLOBAL ---
-        tab_extrato = tabview.tab("Extrato Global")
-        self.ent_busca_lanc = ctk.CTkEntry(tab_extrato, placeholder_text="Filtrar por nome ou documento...", width=500)
+        # --- ABA 1: EXTRATO DE CRÉDITOS ---
+        self.ent_busca_lanc = ctk.CTkEntry(tab_creditos, placeholder_text="Filtrar por nome ou documento...", width=500)
         self.ent_busca_lanc.pack(pady=10)
         
         # Treeview
-        self.tree_l = ttk.Treeview(tab_extrato, columns=("ID", "Data", "Nome", "Tipo", "Valor", "Categoria", "Usuario"), show='headings')
+        self.tree_l = ttk.Treeview(tab_creditos, columns=("ID", "Data", "Nome", "Tipo", "Valor", "Categoria", "Usuario"), show='headings')
         self.tree_l.heading("ID", text="ID"); self.tree_l.column("ID", width=50, anchor="center")
         self.tree_l.heading("Data", text="Data"); self.tree_l.column("Data", width=100, anchor="center")
         self.tree_l.heading("Nome", text="Cliente"); self.tree_l.column("Nome", width=250)
@@ -875,11 +895,41 @@ class AppHotelLTS(ctk.CTk):
         self.ent_busca_lanc.bind("<KeyRelease>", lambda e: self.atualizar_lista_lancamentos())
         self.atualizar_lista_lancamentos()
 
-        # --- ABA 2: CONTROLE DE INADIMPLÊNCIA ---
-        tab_multas = tabview.tab("Controle de Inadimplência (Multas)")
-        ctk.CTkLabel(tab_multas, text="Clientes com multas pendentes de pagamento", text_color="gray").pack(pady=5)
+        # --- ABA 2: HISTÓRICO DE MULTAS ---
+        ent_busca_multas = ctk.CTkEntry(tab_multas_hist, placeholder_text="Filtrar por nome ou documento...", width=500)
+        ent_busca_multas.pack(pady=10)
         
-        tv_m = ttk.Treeview(tab_multas, columns=("N", "D", "T", "V"), show="headings")
+        tree_m = ttk.Treeview(tab_multas_hist, columns=("ID", "Data", "Nome", "Tipo", "Valor", "Categoria", "Usuario"), show='headings')
+        tree_m.heading("ID", text="ID"); tree_m.column("ID", width=50, anchor="center")
+        tree_m.heading("Data", text="Data"); tree_m.column("Data", width=100, anchor="center")
+        tree_m.heading("Nome", text="Cliente"); tree_m.column("Nome", width=250)
+        tree_m.heading("Tipo", text="Tipo"); tree_m.column("Tipo", width=120, anchor="center")
+        tree_m.heading("Valor", text="Valor"); tree_m.column("Valor", width=100, anchor="center")
+        tree_m.heading("Categoria", text="Cat/Motivo"); tree_m.column("Categoria", width=150)
+        tree_m.heading("Usuario", text="Resp."); tree_m.column("Usuario", width=100, anchor="center")
+        
+        tree_m.pack(expand=True, fill="both", padx=15, pady=10)
+        self.configurar_tags_tabela(tree_m)
+
+        def atualizar_lista_multas():
+            tree_m.delete(*tree_m.get_children())
+            filtro = ent_busca_multas.get()
+            dados = self.core.get_historico_global(filtro, tipos=('MULTA', 'PAGAMENTO_MULTA'))
+            for i, d in enumerate(dados):
+                data_br = datetime.strptime(d['data_acao'], "%Y-%m-%d").strftime("%d/%m/%Y")
+                tags = ['odd' if i % 2 != 0 else 'even']
+                if d['tipo'] == 'MULTA': tags.append('multa')
+                if d['tipo'] == 'PAGAMENTO_MULTA': tags.append('pagamento_multa')
+                
+                tree_m.insert("", "end", values=(d['id'], data_br, d['nome'], d['tipo'], f"{d['valor']:.2f}", d['categoria'], d['usuario']), tags=tags)
+
+        ent_busca_multas.bind("<KeyRelease>", lambda e: atualizar_lista_multas())
+        atualizar_lista_multas()
+
+        # --- ABA 3: INADIMPLÊNCIA (RESUMO) ---
+        ctk.CTkLabel(tab_inadimplencia, text="Clientes com multas pendentes de pagamento", text_color="gray").pack(pady=5)
+        
+        tv_m = ttk.Treeview(tab_inadimplencia, columns=("N", "D", "T", "V"), show="headings")
         tv_m.heading("N", text="Nome"); tv_m.column("N", width=300)
         tv_m.heading("D", text="Documento"); tv_m.column("D", width=150, anchor="center")
         tv_m.heading("T", text="Telefone"); tv_m.column("T", width=150, anchor="center")
@@ -891,13 +941,13 @@ class AppHotelLTS(ctk.CTk):
         for d in devedores:
             tv_m.insert("", "end", values=(d[0], d[1], d[2], f"R$ {d[3]:.2f}"))
         
-        # Duplo clique para ir ao histórico pagar
+        # Duplo clique para ir ao histórico do cliente e pagar
         tv_m.bind("<Double-1>", lambda e: self.tela_historico(tv_m.item(tv_m.selection()[0])['values'][0], str(tv_m.item(tv_m.selection()[0])['values'][1])))
 
     def atualizar_lista_lancamentos(self):
         self.tree_l.delete(*self.tree_l.get_children())
         filtro = self.ent_busca_lanc.get()
-        dados = self.core.get_historico_global(filtro)
+        dados = self.core.get_historico_global(filtro, tipos=('ENTRADA', 'SAIDA'))
         for i, d in enumerate(dados):
             data_br = datetime.strptime(d['data_acao'], "%Y-%m-%d").strftime("%d/%m/%Y")
             tags = ['odd' if i % 2 != 0 else 'even']
@@ -1002,6 +1052,11 @@ class AppHotelLTS(ctk.CTk):
                         try: self.core.restaurar_backup(path, self.current_user['username']); messagebox.showinfo("Sucesso", "Backup restaurado! Reinicie o sistema.")
                         except Exception as e: messagebox.showerror("Erro", str(e))
             ctk.CTkButton(f_backup, text="Restaurar Backup", height=30, fg_color=self.colors["vermelho"], command=restaurar).pack(side="left", padx=5)
+            
+            ctk.CTkButton(f_backup, text="🧹 Otimizar Banco", height=30, fg_color="#2c3e50", command=lambda: [
+                self.core.otimizar_banco(),
+                messagebox.showinfo("Sucesso", "Banco de dados otimizado e compactado!")
+            ]).pack(side="left", padx=5)
 
         # --- ABA 2: USUÁRIOS ---
         f_form = ctk.CTkFrame(tab_usuarios, fg_color="transparent"); f_form.pack(pady=10, fill="x", padx=10)
@@ -1177,12 +1232,30 @@ class AppHotelLTS(ctk.CTk):
         
         ctk.CTkLabel(f_detalhes, text="2. Dados do Lançamento", font=("Arial", 14, "bold")).pack(pady=5)
         
+        # Refatoração: Atualização dinâmica dos campos baseada no tipo
+        def atualizar_opcoes_categoria():
+            tipo = tipo_var.get()
+            if tipo == "ENTRADA":
+                e_cat.configure(values=self.core.get_categorias())
+                e_cat.set("Selecione a Categoria")
+            elif tipo == "SAIDA":
+                e_cat.configure(values=["Uso", "Consumo", "Serviço"])
+                e_cat.set("Uso")
+            elif tipo == "MULTA":
+                e_cat.configure(values=["Danos", "Atraso", "Fumar no Quarto", "Outros"])
+                e_cat.set("Motivo da Multa")
+            elif tipo == "PAGAMENTO_MULTA":
+                e_cat.configure(values=["Dinheiro", "PIX", "Cartão"])
+                e_cat.set("Forma de Pagamento")
+
         tipo_var = ctk.StringVar(value="ENTRADA")
         f_tipo = ctk.CTkFrame(f_detalhes, fg_color="transparent"); f_tipo.pack(pady=5)
-        ctk.CTkRadioButton(f_tipo, text="Crédito", variable=tipo_var, value="ENTRADA", fg_color=self.colors["verde"]).grid(row=0, column=0, padx=5, pady=5)
-        ctk.CTkRadioButton(f_tipo, text="Uso (Baixa)", variable=tipo_var, value="SAIDA", fg_color=self.colors["vermelho"]).grid(row=0, column=1, padx=5, pady=5)
-        ctk.CTkRadioButton(f_tipo, text="Multa", variable=tipo_var, value="MULTA", fg_color=self.colors["dourado"]).grid(row=1, column=0, padx=5, pady=5)
-        ctk.CTkRadioButton(f_tipo, text="Pgto Multa", variable=tipo_var, value="PAGAMENTO_MULTA", fg_color="#27ae60").grid(row=1, column=1, padx=5, pady=5)
+        
+        opcoes_radio = [("Crédito", "ENTRADA", self.colors["verde"], 0, 0), ("Uso (Baixa)", "SAIDA", self.colors["vermelho"], 0, 1),
+                        ("Multa", "MULTA", self.colors["dourado"], 1, 0), ("Pgto Multa", "PAGAMENTO_MULTA", "#27ae60", 1, 1)]
+        
+        for txt, val, col, r, c in opcoes_radio:
+            ctk.CTkRadioButton(f_tipo, text=txt, variable=tipo_var, value=val, fg_color=col, command=atualizar_opcoes_categoria).grid(row=r, column=c, padx=5, pady=5)
         
         e_valor = ctk.CTkEntry(f_detalhes, placeholder_text="Valor (R$)"); e_valor.pack(pady=5)
         e_cat = ctk.CTkComboBox(f_detalhes, values=self.core.get_categorias()); e_cat.pack(pady=5)
@@ -1208,7 +1281,12 @@ class AppHotelLTS(ctk.CTk):
             messagebox.showerror("Acesso Negado", "Você não tem permissão para alterar datas.")
             return
 
-        from tkcalendar import DateEntry  # Importação tardia para acelerar inicialização
+        try:
+            from tkcalendar import DateEntry
+        except ImportError:
+            messagebox.showerror("Erro", "Biblioteca 'tkcalendar' não instalada.\nImpossível abrir calendário.")
+            return
+
         item = self.tree_z.identify_row(event.y)
         if not item: return
         self.tree_z.selection_set(item)

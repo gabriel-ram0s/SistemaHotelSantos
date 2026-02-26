@@ -1,4 +1,7 @@
 customtkinter
+requests
+fpdf
 tkcalendar
 matplotlib
-fpdf2
+pyinstaller-hooks-contrib
+babel

@@ -84,7 +84,7 @@ class SistemaCreditos:
                 self.cursor.execute("ALTER TABLE historico_zebra ADD COLUMN usuario TEXT")
             except sqlite3.OperationalError: pass
 
-            # MIGRATION: Adiciona coluna quarto se não existir
+            # MIGRATION: Adiciona coluna salt para segurança de senha
             try:
                 self.cursor.execute("ALTER TABLE usuarios ADD COLUMN salt TEXT")
             except sqlite3.OperationalError: pass
@@ -94,7 +94,7 @@ class SistemaCreditos:
                 self.cursor.execute("ALTER TABLE usuarios ADD COLUMN can_manage_products INTEGER DEFAULT 0")
             except sqlite3.OperationalError: pass
 
-            # MIGRATION: Adiciona coluna quarto se não existir
+            # MIGRATION: Adiciona colunas de contato em hospedes
             try:
                 self.cursor.execute("ALTER TABLE hospedes ADD COLUMN telefone TEXT")
             except sqlite3.OperationalError: pass
@@ -102,7 +102,7 @@ class SistemaCreditos:
                 self.cursor.execute("ALTER TABLE hospedes ADD COLUMN email TEXT")
             except sqlite3.OperationalError: pass
 
-            # MIGRATION: Adiciona coluna quarto se não existir
+            # MIGRATION: Adiciona coluna quarto em historico
             try:
                 self.cursor.execute("ALTER TABLE historico_zebra ADD COLUMN quarto TEXT")
             except sqlite3.OperationalError: pass
@@ -158,6 +158,16 @@ class SistemaCreditos:
         self.cursor = self.conn.cursor()
         self.criar_tabelas() # Garante que tabelas novas existam
         self.registrar_log(usuario_acao, "RESTAURAR_BACKUP", f"Restaurado de: {arquivo_backup}")
+
+    def otimizar_banco(self):
+        """Executa VACUUM para limpar espaço não utilizado e desfragmentar o banco."""
+        # VACUUM não pode rodar dentro de uma transação, então isolamos a execução
+        old_iso = self.conn.isolation_level
+        self.conn.isolation_level = None
+        try:
+            self.conn.execute("VACUUM")
+        finally:
+            self.conn.isolation_level = old_iso
 
     # =========================================================================
     # 2. AUTENTICAÇÃO & USUÁRIOS
@@ -382,26 +392,41 @@ class SistemaCreditos:
         self.cursor.execute("SELECT tipo, valor, data_acao, categoria, obs, usuario FROM historico_zebra WHERE documento = ? ORDER BY id DESC", (doc,))
         return [dict(r) for r in self.cursor.fetchall()]
 
-    def get_historico_global(self, filtro="", limite=100):
-        # Retorna histórico de todos os clientes com ID para permitir exclusão
+    def get_historico_global(self, filtro="", limite=100, tipos=None):
+        """
+        Retorna histórico de todos os clientes com ID para permitir exclusão.
+        :param filtro: Termo para buscar em nome ou documento.
+        :param limite: Número máximo de registros.
+        :param tipos: Uma tupla/lista de tipos de movimentação a incluir (ex: ('ENTRADA', 'SAIDA')). Se None, busca todos.
+        """
+        base_query = '''
+            SELECT h.id, h.data_acao, c.nome, h.documento, h.tipo, h.valor, h.categoria, h.usuario, h.obs 
+            FROM historico_zebra h
+            JOIN hospedes c ON h.documento = c.documento
+        '''
+        
+        conditions = []
+        params = []
+
         if filtro:
-            termo = f"%{filtro}%"
-            query = '''
-                SELECT h.id, h.data_acao, c.nome, h.documento, h.tipo, h.valor, h.categoria, h.usuario, h.obs 
-                FROM historico_zebra h
-                JOIN hospedes c ON h.documento = c.documento
-                WHERE c.nome LIKE ? OR c.documento LIKE ?
-                ORDER BY h.id DESC LIMIT ?
-            '''
-            self.cursor.execute(query, (termo, termo, limite))
+            conditions.append("(c.nome LIKE ? OR c.documento LIKE ?)")
+            params.extend([f"%{filtro}%", f"%{filtro}%"])
+
+        if tipos:
+            # Cria placeholders (?, ?, ...) para a cláusula IN
+            placeholders = ', '.join('?' for _ in tipos)
+            conditions.append(f"h.tipo IN ({placeholders})")
+            params.extend(tipos)
+
+        if conditions:
+            query = f"{base_query} WHERE {' AND '.join(conditions)}"
         else:
-            query = '''
-                SELECT h.id, h.data_acao, c.nome, h.documento, h.tipo, h.valor, h.categoria, h.usuario, h.obs 
-                FROM historico_zebra h
-                JOIN hospedes c ON h.documento = c.documento
-                ORDER BY h.id DESC LIMIT ?
-            '''
-            self.cursor.execute(query, (limite,))
+            query = base_query
+            
+        query += " ORDER BY h.id DESC LIMIT ?"
+        params.append(limite)
+        
+        self.cursor.execute(query, params)
         return [dict(r) for r in self.cursor.fetchall()]
 
     def excluir_movimentacao(self, id_mov, usuario_acao="Sistema"):
@@ -431,8 +456,10 @@ class SistemaCreditos:
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(0, 10, self.empresa["nome"], ln=True, align='C')
+        # NOTA: A biblioteca FPDF tem suporte limitado a unicode por padrão.
+        # Caracteres especiais podem não ser renderizados corretamente sem embutir uma fonte TTF.
         pdf.set_font("Arial", '', 9)
-        pdf.cell(0, 5, self.empresa["razao"].encode('latin-1', 'replace').decode('latin-1'), ln=True, align='C')
+        pdf.cell(0, 5, self.empresa["razao"], ln=True, align='C')
         pdf.cell(0, 5, f"CNPJ: {self.empresa['cnpj']} | {self.empresa['contato']}", ln=True, align='C')
         pdf.ln(10); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(10)
         pdf.set_font("Arial", 'B', 14); pdf.cell(0, 10, "VOUCHER DE CREDITO", ln=True, align='C'); pdf.ln(5)
@@ -549,6 +576,65 @@ class SistemaCreditos:
         pdf.cell(0, 10, f"TOTAL PENDENTE (MULTAS): R$ {divida:.2f}", ln=True, align='R')
         
         fname = f"Ticket_Multas_{doc_hospede}.pdf"
+        try: pdf.output(fname)
+        except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
+        return fname
+
+    def gerar_pdf_fechamento(self, data_iso):
+        """Gera um relatório PDF com o balanço financeiro do dia especificado."""
+        if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
+        
+        # Busca movimentações do dia
+        self.cursor.execute("SELECT * FROM historico_zebra WHERE data_acao = ? ORDER BY id ASC", (data_iso,))
+        movs = [dict(r) for r in self.cursor.fetchall()]
+        
+        entradas = [m for m in movs if m['tipo'] in ['ENTRADA', 'PAGAMENTO_MULTA']]
+        saidas = [m for m in movs if m['tipo'] == 'SAIDA']
+        
+        total_ent = sum(m['valor'] for m in entradas)
+        total_sai = sum(m['valor'] for m in saidas)
+        
+        data_br = datetime.strptime(data_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
+        
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, self.empresa["nome"], ln=True, align='C')
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, "RELATÓRIO DE FECHAMENTO DE CAIXA", ln=True, align='C')
+        pdf.cell(0, 5, f"DATA: {data_br}", ln=True, align='C')
+        pdf.ln(10)
+        
+        # Resumo
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 8, "RESUMO DO DIA", ln=True, fill=False)
+        pdf.set_font("Arial", '', 11)
+        pdf.cell(100, 8, "TOTAL ENTRADAS (Créditos + Multas):", border=1)
+        pdf.cell(0, 8, f"R$ {total_ent:.2f}", border=1, ln=True, align='R')
+        pdf.cell(100, 8, "TOTAL SAÍDAS (Consumo/Baixas):", border=1)
+        pdf.cell(0, 8, f"R$ {total_sai:.2f}", border=1, ln=True, align='R')
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(100, 8, "SALDO LÍQUIDO DO DIA:", border=1)
+        pdf.cell(0, 8, f"R$ {total_ent - total_sai:.2f}", border=1, ln=True, align='R')
+        
+        pdf.ln(10)
+        
+        # Detalhamento
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 8, "DETALHAMENTO DE MOVIMENTAÇÕES", ln=True)
+        pdf.set_font("Arial", 'B', 9); pdf.set_fill_color(220, 220, 220)
+        pdf.cell(25, 6, "TIPO", 1, 0, 'C', 1); pdf.cell(80, 6, "CLIENTE / DOC", 1, 0, 'C', 1); pdf.cell(30, 6, "VALOR", 1, 0, 'C', 1); pdf.cell(0, 6, "CATEGORIA", 1, 1, 'C', 1)
+        
+        pdf.set_font("Arial", '', 8)
+        for m in movs:
+            hospede = self.get_hospede(m['documento'])
+            nome = hospede['nome'][:25] if hospede else "Desconhecido"
+            pdf.cell(25, 6, m['tipo'], 1, 0, 'C')
+            pdf.cell(80, 6, f"{nome} ({m['documento']})", 1, 0, 'L')
+            pdf.cell(30, 6, f"R$ {m['valor']:.2f}", 1, 0, 'R')
+            pdf.cell(0, 6, m['categoria'][:20], 1, 1, 'L')
+            
+        fname = f"Fechamento_{data_iso}.pdf"
         try: pdf.output(fname)
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
@@ -812,6 +898,39 @@ class SistemaCreditos:
                 writer.writerow([row[0], row[1], f"{row[2]:.2f}".replace('.', ',')])
         return fname
 
+    def exportar_historico_financeiro_csv(self, mes_ano=None):
+        """
+        Exporta histórico financeiro.
+        :param mes_ano: String no formato 'MM/YYYY' para filtrar. Se None, exporta tudo.
+        """
+        query = '''
+            SELECT h.data_acao, c.nome, h.documento, h.tipo, h.valor, h.categoria, h.usuario, h.obs 
+            FROM historico_zebra h
+            JOIN hospedes c ON h.documento = c.documento
+        ''' # Mantem a quebra de linha, mas garante espaco na concatenacao abaixo
+        params = []
+        if mes_ano:
+            query += " WHERE strftime('%m/%Y', h.data_acao) = ?"
+            params.append(mes_ano)
+        
+        query += " ORDER BY h.data_acao DESC, h.id DESC"
+        
+        self.cursor.execute(query, params)
+        data = self.cursor.fetchall()
+        
+        sufixo = mes_ano.replace('/', '-') if mes_ano else "Completo"
+        fname = f"Relatorio_Financeiro_{sufixo}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+        
+        with open(fname, mode='w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerow(['Data', 'Cliente', 'Documento', 'Tipo', 'Valor', 'Categoria', 'Usuario', 'Obs'])
+            for row in data:
+                # Formata valor para padrão PT-BR (vírgula decimal)
+                valor_fmt = f"{row['valor']:.2f}".replace('.', ',')
+                data_fmt = datetime.strptime(row['data_acao'], "%Y-%m-%d").strftime("%d/%m/%Y")
+                writer.writerow([data_fmt, row['nome'], row['documento'], row['tipo'], valor_fmt, row['categoria'], row['usuario'], row['obs']])
+        return fname
+
     # =========================================================================
     # 6. CONFIGURAÇÕES & UTILS
     # =========================================================================
@@ -863,6 +982,13 @@ class SistemaCreditos:
     # =========================================================================
     # 7. AUTO-UPDATE (GITHUB)
     # =========================================================================
+    def _parse_version(self, v):
+        """Converte string '1.2.3' para tupla (1, 2, 3) para comparação correta."""
+        try:
+            return tuple(map(int, v.replace("v", "").split(".")))
+        except ValueError:
+            return (0, 0, 0)
+
     def verificar_atualizacao(self, repo_usuario="gabriel-ram0s", repo_nome="sistemahotelsantos"):
         """
         Verifica se há uma nova release no GitHub.
@@ -880,7 +1006,7 @@ class SistemaCreditos:
                 tag_remota = dados.get("tag_name", "").replace("v", "")
                 
                 # Comparação simples de string (idealmente usar semantic versioning)
-                if tag_remota > self.versao_atual:
+                if self._parse_version(tag_remota) > self._parse_version(self.versao_atual):
                     assets = dados.get("assets", [])
                     if assets:
                         # Pega o primeiro asset (assumindo que é o .exe)
