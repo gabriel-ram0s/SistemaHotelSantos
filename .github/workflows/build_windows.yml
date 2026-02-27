@@ -2,7 +2,8 @@ name: Build Windows Installer
 
 on:
   push:
-    tags: [ "v*" ]
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -45,7 +46,12 @@ jobs:
         shell: powershell
         run: |
           # Extrai a versão da tag (ex: v4.3.0 -> 4.3.0)
-          $version = "${{ github.ref_name }}".Substring(1)
+          if ("${{ github.ref_type }}" -eq "tag") {
+              $version = "${{ github.ref_name }}".Substring(1)
+          } else {
+              $version = "0.0.0-dev"
+              Write-Warning "Build manual ou sem tag. Usando versão genérica: $version"
+          }
           Write-Host "Atualizando arquivos para a versão: $version"
 
           # Atualiza setup.iss (apenas se existir)
