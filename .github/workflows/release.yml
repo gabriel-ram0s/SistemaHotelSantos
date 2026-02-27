@@ -71,7 +71,7 @@ jobs:
 
       - name: Compilar Instalador (Inno Setup)
         if: hashFiles('setup.iss') != ''
-        uses: Minionguyjpro/Inno-Setup-Action@v1
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: setup.iss
 
