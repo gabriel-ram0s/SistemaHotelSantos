@@ -1,0 +1,68 @@
+name: Build Windows MSI Installer
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Instalar Dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install cx_Freeze requests fpdf customtkinter tkcalendar matplotlib babel --force-reinstall
+
+      - name: Debug de Estrutura (Listar Arquivos)
+        shell: powershell
+        run: |
+          Write-Host "Estrutura de arquivos no Runner:"
+          Get-ChildItem -Recurse
+
+      - name: Gerar Instalador MSI
+        shell: powershell
+        run: |
+          $env:PYTHONPATH = "."
+          python setup.py bdist_msi
+
+      - name: Organizar Artefatos e Assinar
+        shell: powershell
+        run: |
+          mkdir dist_final
+          if (Test-Path "dist/*.msi") { 
+              Move-Item dist/*.msi dist_final/ 
+          }
+          # Assinatura digital conforme instrução de referência
+          $signature = @"
+          ==========================================
+          ASSINATURA DIGITAL DE REFERÊNCIA
+          ==========================================
+          Desenvolvido com assistência de Gemini AI
+          Versão de Referência: 2025-12-17
+          Data da Build: $(Get-Date -Format 'dd/MM/yyyy HH:mm')
+          ==========================================
+          "@
+          $signature | Out-File -FilePath dist_final/signature.txt -Encoding utf8
+
+      - name: Upload do Instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: SistemaHotel-Instalador
+          path: dist_final/
+          retention-days: 7
