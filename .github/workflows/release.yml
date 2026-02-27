@@ -1,0 +1,88 @@
+name: Release Automática
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Necessário para gerar o histórico de tags corretamente
+
+      - name: Gerar Nova Tag de Versão
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          tag_prefix: v
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Instalar Dependências
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow Babel
+
+      - name: Atualizar Versão nos Arquivos
+        shell: powershell
+        run: |
+          $version = "${{ steps.tag_version.outputs.new_version }}"
+          Write-Host "Aplicando versão $version nos arquivos..."
+
+          # Atualiza sistema_clientes.py
+          $file1 = "sistemahotelsantos/sistema_clientes.py"
+          if (Test-Path $file1) {
+            (Get-Content $file1) | ForEach-Object { $_ -replace '(self.versao_atual\s*=\s*")[^"]+(")', "`$1$version`$2" } | Set-Content $file1
+          }
+
+          # Atualiza app_gui.py
+          $file2 = "sistemahotelsantos/app_gui.py"
+          if (Test-Path $file2) {
+            (Get-Content $file2) | ForEach-Object { $_ -replace '(Gestao de Creditos v)[0-9.]+', "`$1$version" } | Set-Content $file2
+          }
+
+          # Atualiza setup.iss se existir
+          if (Test-Path setup.iss) {
+            (Get-Content setup.iss) | ForEach-Object { $_ -replace '(#define MyAppVersion\s+")[^"]+(")', "`$1$version`$2" } | Set-Content setup.iss
+          }
+
+      - name: Compilar Executável (PyInstaller)
+        run: |
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
+
+      - name: Compilar Instalador (Inno Setup)
+        if: hashFiles('setup.iss') != ''
+        uses: Minionguyjpro/Inno-Setup-Action@v1
+        with:
+          path: setup.iss
+
+      - name: Criar Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
+          files: |
+            dist/SistemaHotel.exe
+            Output/Instalador_SistemaHotel.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
