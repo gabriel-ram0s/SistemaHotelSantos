@@ -1,47 +1,80 @@
-; Script gerado para Inno Setup
+; ===================================================================
+;  Script Inno Setup para o Sistema Hotel Santos
+; ===================================================================
 
 #define MyAppName "Sistema Hotel Santos"
-#define MyAppVersion "4.2.9"
+#define MyAppVersion "4.2.9" 
 #define MyAppPublisher "Gabriel Ramos"
 #define MyAppURL "https://github.com/gabriel-ram0s/sistemahotelsantos"
 #define MyAppExeName "SistemaHotel.exe"
+#define AppIcon "sistemahotelsantos\app.ico"
 
 [Setup]
-; ID único do aplicativo
-AppId={{A8F9D8E2-3B4C-4D5E-9F0G-1H2I3J4K5L6M}
+; AppId: Identificador único. Usar o nome do app garante que atualizações
+; sobreponham a versão correta.
+AppId={{#MyAppName}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-; INSTALAÇÃO NA PASTA DO USUÁRIO (AppData/Local) para permitir escrita no DB e Auto-Update
+
+; Instala na pasta de dados do usuário local. Essencial para:
+; 1. Permitir instalação sem privilégios de administrador.
+; 2. Permitir que o app escreva no seu próprio diretório (banco de dados, logs).
+; 3. Permitir que o mecanismo de auto-update funcione.
 DefaultDirName={autolocalappdata}\{#MyAppName}
+
+; Desabilita a página de seleção de pasta, pois a instalação é sempre no local padrão.
+DisableDirPage=yes
+; Desabilita a página de grupo do Menu Iniciar.
 DisableProgramGroupPage=yes
+
+; Diretório de saída e nome do arquivo do instalador.
 OutputDir=Output
 OutputBaseFilename=Instalador_SistemaHotel
-; Aponta para o ícone na subpasta
-SetupIconFile=sistemahotelsantos\app.ico
+
+; Ícone do arquivo do instalador.
+SetupIconFile={#AppIcon}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-; Não exige admin para instalar (pois é na pasta do usuário)
+
+; Não exige privilégios de administrador para instalar.
 PrivilegesRequired=lowest
+
+; Adiciona informações de versão ao executável do instalador.
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription="Instalador do {#MyAppName}"
+VersionInfoTextVersion="{#MyAppVersion}"
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Tasks]
+; Permite ao usuário escolher se quer um ícone na área de trabalho.
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
+; Arquivo principal da aplicação, gerado pelo PyInstaller na pasta 'dist'.
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Copia o ícone para a pasta de instalação
-Source: "sistemahotelsantos\app.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Copia o ícone para a pasta de instalação para ser usado nos atalhos e na janela do app.
+Source: "{#AppIcon}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
+; Atalho no Menu Iniciar.
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+; Atalho na Área de Trabalho (se a task 'desktopicon' for selecionada).
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; Executa o aplicativo após a instalação ser concluída.
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Remove arquivos e pastas criados pelo aplicativo durante a desinstalação.
+Type: files; Name: "{app}\hotel.db"
+Type: files; Name: "{app}\*.log"
+Type: dirifempty; Name: "{app}\backups"

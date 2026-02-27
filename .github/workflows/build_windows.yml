@@ -26,7 +26,7 @@ jobs:
       - name: Instalar Dependências Python
         run: |
           pip install --upgrade pip
-          pip install 
+          pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow
       - name: Rodar Testes Unitários
         shell: powershell
         run: |
@@ -40,6 +40,21 @@ jobs:
           } else {
               Write-Warning "Arquivo de teste não encontrado. Pulando etapa de testes."
           }
+
+      - name: Atualizar Versão a partir da Tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: powershell
+        run: |
+          # Extrai a versão da tag (ex: v4.3.0 -> 4.3.0)
+          $version = "${{ github.ref_name }}".Substring(1)
+          Write-Host "Atualizando arquivos para a versão: $version"
+
+          # Atualiza setup.iss
+          (Get-Content -Path setup.iss) | ForEach-Object { $_ -replace '(#define MyAppVersion\s+")[^"]+(")', "`$1$version`$2" } | Set-Content -Path setup.iss
+          # Atualiza a versão no core do sistema (para auto-update)
+          (Get-Content -Path sistemahotelsantos/sistema_clientes.py) | ForEach-Object { $_ -replace '(self.versao_atual\s*=\s*")[^"]+(")', "`$1$version`$2" } | Set-Content -Path sistemahotelsantos/sistema_clientes.py
+          # Atualiza a versão no título da GUI
+          (Get-Content -Path sistemahotelsantos/app_gui.py) | ForEach-Object { $_ -replace '(\.title\("Hotel Santos - Gestao de Creditos v)[^"]+(")', "`$1$version`$2" } | Set-Content -Path sistemahotelsantos/app_gui.py
 
       - name: Gerar Executável (PyInstaller)
         shell: powershell
@@ -57,7 +72,7 @@ jobs:
           # --collect-all customtkinter garante que temas e assets da lib gráfica sejam incluídos
           # --icon define o ícone do arquivo .exe
           # --add-data embute o arquivo .ico dentro do executável para uso interno (janela)
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --distpath ./dist $target
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist $target
 
       - name: Listar Arquivos Gerados (Debug - Dist)
         run: |
@@ -66,7 +81,7 @@ jobs:
 
       # --- NOVO PASSO: Compilar Instalador com Inno Setup ---
       - name: Compilar Instalador (Inno Setup)
-        uses: MinhasKamal/setup-innosetup@v1
+        uses: Minionguyjpro/Inno-Setup-Action@v1
         with:
           path: setup.iss
 

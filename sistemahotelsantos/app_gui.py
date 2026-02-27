@@ -13,31 +13,21 @@ from difflib import get_close_matches
 class AppHotelLTS(ctk.CTk):
     def __init__(self):
         super().__init__()
+
+        def resource_path(relative_path):
+            """ Obtém o caminho absoluto para o recurso, funcionando em desenvolvimento e no PyInstaller """
+            try:
+                # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+                base_path = sys._MEIPASS
+            except Exception:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+            return os.path.join(base_path, relative_path)
+
         self.core = SistemaCreditos()
         self.title("Hotel Santos - Gestao de Creditos v4.2.9")
         self.geometry("1200x850")
         self.minsize(1024, 768) # Garante um tamanho mínimo para não quebrar o layout
         self.after(0, lambda: self.state('zoomed')) # Inicia maximizado no Windows
-        # Configuração do Ícone da Janela (Runtime)
-        # O PyInstaller com --onefile descompacta em sys._MEIPASS
-        try:
-            icon_path = os.path.join(os.path.dirname(__file__), "app.ico")
-            if os.path.exists(icon_path):
-                self.iconbitmap(icon_path)
-            else:
-                # Tenta buscar na raiz se estiver rodando via script ou onefile raiz
-                self.iconbitmap("app.ico")
-        except:
-            pass
-        
-        # Carrega tema salvo (0=Light, 1=Dark)
-        ctk.set_appearance_mode("Dark" if self.core.get_config('tema') == 1 else "Light")
-        
-        # Paleta de Cores (Baseada no style.css do Site)
-        self.colors = {
-            "verde": "#004d31",
-            "verde_hover": "#003622",
-            "dourado": "#b08d21",
             "dourado_hover": "#8e7018",
             "vermelho": "#c0392b",
             "branco": "#fdfdfd"
