@@ -2,7 +2,6 @@ name: Build Windows Installer
 
 on:
   push:
-    branches: [ "main" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
@@ -99,10 +98,11 @@ jobs:
             Output/*.exe
           retention-days: 5
 
-      - name: Criar Release (Apenas Tags)
+      - name: Publicar/Atualizar Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          # Se a release já foi criada pelo auto_tag, isso apenas faz upload dos arquivos
           files: |
             # O Auto-Update precisa deste arquivo solto:
             dist/SistemaHotel.exe

@@ -28,6 +28,10 @@ class AppHotelLTS(ctk.CTk):
         self.geometry("1200x850")
         self.minsize(1024, 768) # Garante um tamanho mínimo para não quebrar o layout
         self.after(0, lambda: self.state('zoomed')) # Inicia maximizado no Windows
+        self.colors = {
+            "verde": "#2ecc71",
+            "verde_hover": "#27ae60",
+            "dourado": "#f1c40f",
             "dourado_hover": "#8e7018",
             "vermelho": "#c0392b",
             "branco": "#fdfdfd"
