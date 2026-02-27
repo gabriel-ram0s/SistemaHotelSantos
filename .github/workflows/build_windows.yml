@@ -25,7 +25,7 @@ jobs:
       - name: Instalar Dependências Python
         run: |
           pip install --upgrade pip
-          pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow
+          pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow Babel
       - name: Rodar Testes Unitários
         shell: powershell
         run: |
