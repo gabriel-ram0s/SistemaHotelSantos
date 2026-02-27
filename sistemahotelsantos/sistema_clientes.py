@@ -21,7 +21,18 @@ except ImportError:
 
 class SistemaCreditos:
     def __init__(self, db_name="hotel.db"):
-        self.db_name = db_name
+        # --- CORREÇÃO DE DIRETÓRIO (APPDATA) ---
+        # Define o caminho base na pasta do usuário para evitar erros de permissão em Program Files
+        if db_name == ":memory:":
+            self.db_name = db_name
+            self.base_dir = "."
+        else:
+            app_data = os.getenv('APPDATA') if os.name == 'nt' else os.path.expanduser('~')
+            self.base_dir = os.path.join(app_data, "SistemaHotelSantos")
+            if not os.path.exists(self.base_dir):
+                os.makedirs(self.base_dir)
+            self.db_name = os.path.join(self.base_dir, db_name)
+
         self.versao_atual = "4.2.9"  # Versão estável (apenas EXE)
         self.empresa = {
             "nome": "HOTEL SANTOS",
@@ -31,7 +42,7 @@ class SistemaCreditos:
             "contato": "Tel: (19) 3651-3297 / Whats: (19) 99759-7503",
             "email": "hotelsantoss@hotmail.com"
         }
-        self.conn = sqlite3.connect(db_name, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.criar_tabelas()
@@ -134,15 +145,16 @@ class SistemaCreditos:
                 self.cursor.execute("INSERT INTO usuarios (username, password, is_admin, can_change_dates, can_manage_products, salt) VALUES (?, ?, ?, ?, ?, ?)", ('gabriel', pass_hash, 1, 1, 1, salt))
 
     def fazer_backup(self):
-        if not os.path.exists("backups"):
-            os.makedirs("backups")
+        backup_dir = os.path.join(self.base_dir, "backups")
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dst = f"backups/backup_{timestamp}.db"
+        dst = os.path.join(backup_dir, f"backup_{timestamp}.db")
         shutil.copy2(self.db_name, dst)
         
         # Otimização: Rotação de Backups (Mantém apenas os 20 mais recentes)
         try:
-            files = sorted([os.path.join("backups", f) for f in os.listdir("backups") if f.endswith(".db")], key=os.path.getmtime)
+            files = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.endswith(".db")], key=os.path.getmtime)
             while len(files) > 20:
                 os.remove(files.pop(0))
         except Exception: pass

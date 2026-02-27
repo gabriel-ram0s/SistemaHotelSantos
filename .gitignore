@@ -1,6 +1,37 @@
+# Python
 __pycache__/
-*.db
-*.pdf
+*.py[cod]
+*$py.class
+
+# Ambientes Virtuais
+.venv/
+venv/
+env/
+
+# Distribuição e Build
 dist/
 build/
 *.spec
+*.egg-info/
+Output/
+build_temp/
+
+# Banco de Dados e Backups
+*.db
+backups/
+
+# Arquivos Gerados pelo Sistema (Relatórios, Logs, Updates)
+*.pdf
+*.csv
+*.log
+logs/
+updater.bat
+update_temp.exe
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db

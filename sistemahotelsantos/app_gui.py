@@ -8,26 +8,31 @@ from datetime import datetime
 import webbrowser
 from urllib.parse import quote
 import threading
-from difflib import get_close_matches
+import traceback
+
+def resource_path(relative_path):
+    """ Obtém o caminho absoluto para recursos, funcionando para dev e PyInstaller """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Em desenvolvimento, usa o diretório do script atual
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
 
 class AppHotelLTS(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        def resource_path(relative_path):
-            """ Obtém o caminho absoluto para o recurso, funcionando em desenvolvimento e no PyInstaller """
-            try:
-                # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
-                base_path = sys._MEIPASS
-            except Exception:
-                base_path = os.path.dirname(os.path.abspath(__file__))
-            return os.path.join(base_path, relative_path)
-
         self.core = SistemaCreditos()
         self.title("Hotel Santos - Gestao de Creditos v4.2.9")
         self.geometry("1200x850")
         self.minsize(1024, 768) # Garante um tamanho mínimo para não quebrar o layout
-        self.after(0, lambda: self.state('zoomed')) # Inicia maximizado no Windows
+        
+        # Tenta iniciar maximizado (funciona no Windows, ignora se falhar em outros OS)
+        try: self.after(0, lambda: self.state('zoomed'))
+        except: pass
+
         self.colors = {
             "verde": "#2ecc71",
             "verde_hover": "#27ae60",
@@ -43,6 +48,13 @@ class AppHotelLTS(ctk.CTk):
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
         
+        # Configuração do Ícone da Janela
+        # Tenta carregar o ícone usando o caminho seguro
+        try:
+            self.iconbitmap(resource_path("app.ico"))
+        except Exception:
+            pass # Se falhar (ex: linux ou arquivo faltando), segue sem ícone
+
         # Protocolo para fechar o app sem erros de terminal
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -123,7 +135,8 @@ class AppHotelLTS(ctk.CTk):
         """Encerra o processo de forma limpa"""
         try:
             # Tenta realizar um backup automático silencioso ao fechar
-            self.core.fazer_backup()
+            if hasattr(self, 'core'):
+                self.core.fazer_backup()
         except:
             pass # Não impede o fechamento se o backup falhar
         self.quit()
@@ -475,7 +488,7 @@ class AppHotelLTS(ctk.CTk):
         else:
             # Reseta para o padrão do Matplotlib para o tema claro
             plt.style.use('default')
-            plt.rcParams.update(plt.rcParamsDefault)
+            plt.rcdefaults()
 
         self.current_screen_function = self.tela_dash
         self.current_screen_args = ()
@@ -1397,4 +1410,26 @@ class AppHotelLTS(ctk.CTk):
         self._janela_movimentacao("Pagar Multa", doc, nome, "PAGAMENTO_MULTA", cb)
 
 if __name__ == "__main__":
-    AppHotelLTS().mainloop()
+    try:
+        app = AppHotelLTS()
+        app.mainloop()
+    except Exception as e:
+        # --- TRATAMENTO GLOBAL DE ERROS (CRASH LOGGER) ---
+        # Se o app falhar ao iniciar, grava o erro em um arquivo para debug
+        app_data = os.getenv('APPDATA') if os.name == 'nt' else os.path.expanduser('~')
+        log_dir = os.path.join(app_data, "SistemaHotelSantos", "logs")
+        
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = os.path.join(log_dir, f"crash_log_{timestamp}.txt")
+        
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(f"ERRO CRÍTICO NA INICIALIZAÇÃO - {datetime.now()}\n")
+            f.write("-" * 50 + "\n")
+            f.write(traceback.format_exc())
+        
+        # Tenta mostrar um alerta visual (se o Tkinter ainda estiver vivo/acessível)
+        try: messagebox.showerror("Erro Fatal", f"O sistema encontrou um erro e precisou ser fechado.\n\nLog salvo em:\n{log_file}")
+        except: pass

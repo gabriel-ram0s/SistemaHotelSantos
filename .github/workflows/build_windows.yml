@@ -71,7 +71,7 @@ jobs:
           # --collect-all customtkinter garante que temas e assets da lib gráfica sejam incluídos
           # --icon define o ícone do arquivo .exe
           # --add-data embute o arquivo .ico dentro do executável para uso interno (janela)
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist $target
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp $target
 
       - name: Listar Arquivos Gerados (Debug - Dist)
         run: |
