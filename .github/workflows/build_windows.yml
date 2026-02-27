@@ -48,8 +48,12 @@ jobs:
           $version = "${{ github.ref_name }}".Substring(1)
           Write-Host "Atualizando arquivos para a versão: $version"
 
-          # Atualiza setup.iss
-          (Get-Content -Path setup.iss) | ForEach-Object { $_ -replace '(#define MyAppVersion\s+")[^"]+(")', "`$1$version`$2" } | Set-Content -Path setup.iss
+          # Atualiza setup.iss (apenas se existir)
+          if (Test-Path setup.iss) {
+              (Get-Content -Path setup.iss) | ForEach-Object { $_ -replace '(#define MyAppVersion\s+")[^"]+(")', "`$1$version`$2" } | Set-Content -Path setup.iss
+          } else {
+              Write-Warning "Arquivo setup.iss não encontrado. Pulando atualização de versão no instalador."
+          }
           # Atualiza a versão no core do sistema (para auto-update)
           (Get-Content -Path sistemahotelsantos/sistema_clientes.py) | ForEach-Object { $_ -replace '(self.versao_atual\s*=\s*")[^"]+(")', "`$1$version`$2" } | Set-Content -Path sistemahotelsantos/sistema_clientes.py
           # Atualiza a versão no título da GUI
@@ -78,8 +82,9 @@ jobs:
           Write-Host "Conteúdo de dist (Executável):"
           if (Test-Path "./dist") { Get-ChildItem ./dist } else { Write-Host "Pasta dist não existe." }
 
-      # --- NOVO PASSO: Compilar Instalador com Inno Setup ---
+      # --- Compilar Instalador com Inno Setup (Se setup.iss existir) ---
       - name: Compilar Instalador (Inno Setup)
+        if: hashFiles('setup.iss') != ''
         uses: Minionguyjpro/Inno-Setup-Action@v1
         with:
           path: setup.iss

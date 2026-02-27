@@ -20,10 +20,8 @@ jobs:
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
-          # É NECESSÁRIO usar um Personal Access Token (PAT) com permissão de 'repo'.
-          # O GITHUB_TOKEN padrão não pode disparar outros workflows (como o de build).
-          # Crie um PAT e adicione-o aos Segredos do repositório com o nome 'PAT'.
-          github_token: ${{ secrets.PAT }}
+          # Tenta usar o PAT primeiro (para disparar builds), senão usa o token padrão
+          github_token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
           default_bump: patch
           release_branches: main
           tag_prefix: v
