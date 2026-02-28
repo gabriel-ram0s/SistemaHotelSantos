@@ -10,9 +10,9 @@
 #define AppIcon "sistemahotelsantos\app.ico"
 
 [Setup]
-; AppId: Identificador único. Usar o nome do app garante que atualizações
-; sobreponham a versão correta.
-AppId={{#MyAppName}}
+; AppId: Identificador único gerado (GUID). 
+; Garante que o Windows reconheça atualizações corretamente.
+AppId={{8DD86653-6C3C-4336-8343-9C5488408762}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
