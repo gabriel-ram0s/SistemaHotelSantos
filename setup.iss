@@ -24,7 +24,7 @@ AppUpdatesURL={#MyAppURL}
 ; 1. Permitir instalação sem privilégios de administrador.
 ; 2. Permitir que o app escreva no seu próprio diretório (banco de dados, logs).
 ; 3. Permitir que o mecanismo de auto-update funcione.
-DefaultDirName={autolocalappdata}\{#MyAppName}
+DefaultDirName={localappdata}\{#MyAppName}
 
 ; Desabilita a página de seleção de pasta, pois a instalação é sempre no local padrão.
 DisableDirPage=yes
