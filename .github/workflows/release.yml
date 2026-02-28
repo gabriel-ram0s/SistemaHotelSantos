@@ -51,18 +51,28 @@ jobs:
           # Atualiza sistema_clientes.py
           $file1 = "sistemahotelsantos/sistema_clientes.py"
           if (Test-Path $file1) {
-            (Get-Content $file1) | ForEach-Object { $_ -replace '(self.versao_atual\s*=\s*")[^"]+(")', "`$1$version`$2" } | Set-Content $file1
+            (Get-Content $file1) | ForEach-Object { 
+              $_ -replace 'self.versao_atual\s*=\s*"[^"]+"', ('self.versao_atual = "' + $version + '"')
+            } | Set-Content $file1 -Encoding UTF8
           }
 
           # Atualiza app_gui.py
           $file2 = "sistemahotelsantos/app_gui.py"
           if (Test-Path $file2) {
-            (Get-Content $file2) | ForEach-Object { $_ -replace '(Gestao de Creditos v)[0-9.]+', "`$1$version" } | Set-Content $file2
+            (Get-Content $file2) | ForEach-Object { 
+              $_ -replace 'Gestao de Creditos v[0-9.]+', ('Gestao de Creditos v' + $version)
+            } | Set-Content $file2 -Encoding UTF8
           }
 
           # Atualiza setup.iss se existir
           if (Test-Path setup.iss) {
-            (Get-Content setup.iss) | ForEach-Object { $_ -replace '(#define MyAppVersion\s+")[^"]+(")', "`$1$version`$2" } | Set-Content setup.iss
+            (Get-Content setup.iss) | ForEach-Object {
+              if ($_ -match '^\s*#define\s+MyAppVersion\s+') {
+                '#define MyAppVersion "' + $version + '"'
+              } else {
+                $_
+              }
+            } | Set-Content setup.iss -Encoding UTF8
           }
 
       - name: Compilar Executável (PyInstaller)
