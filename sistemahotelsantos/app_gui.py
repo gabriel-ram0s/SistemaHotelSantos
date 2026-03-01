@@ -10,22 +10,22 @@ from urllib.parse import quote
 import threading
 import traceback
 
-def resource_path(relative_path):
+def resource_path(relative_path: str) -> str:
     """ Obtém o caminho absoluto para recursos, funcionando para dev e PyInstaller """
-    try:
-        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        # Em desenvolvimento, usa o diretório do script atual
-        base_path = os.path.dirname(os.path.abspath(__file__))
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
 class AppHotelLTS(ctk.CTk):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
-        self.core = SistemaCreditos()
-        self.title("Hotel Santos - Gestao de Creditos v4.2.9")
+        # Carrega o core e o tema PREVIAMENTE para evitar conflito de cores (Treeview vs CTk)
+        self.core: SistemaCreditos = SistemaCreditos()
+        saved_theme = self.core.get_config('tema')
+        ctk.set_appearance_mode("Dark" if saved_theme == 1 else "Light")
+        ctk.set_default_color_theme("green")
+
+        self.title(f"Hotel Santos - Gestao de Creditos v{self.core.versao_atual}")
         self.geometry("1200x850")
         self.minsize(1024, 768) # Garante um tamanho mínimo para não quebrar o layout
         
@@ -34,19 +34,22 @@ class AppHotelLTS(ctk.CTk):
         except: pass
 
         self.colors = {
-            "verde": "#2ecc71",
-            "verde_hover": "#27ae60",
-            "dourado": "#f1c40f",
-            "dourado_hover": "#8e7018",
-            "vermelho": "#c0392b",
-            "branco": "#fdfdfd"
+            "verde": "#10b981",       # Emerald 500
+            "verde_hover": "#059669", # Emerald 600
+            "dourado": "#f59e0b",     # Amber 500
+            "dourado_hover": "#d97706", # Amber 600
+            "vermelho": "#ef4444",    # Red 500
+            "vermelho_hover": "#dc2626", # Red 600
+            "branco": "#f8fafc",      # Slate 50
+            "sidebar_bg": "#1e293b",  # Slate 800 (Azul acinzentado escuro)
+            "sidebar_txt": "#e2e8f0"  # Slate 200
         }
         self.setup_custom_styles()
-        self.current_user = None
-        self.search_job = None # Variável para controlar o timer da busca (Debounce)
-        self.current_screen_function = None
-        self.current_screen_args = ()
-        self.current_screen_kwargs = {}
+        self.current_user: dict | None = None
+        self.search_job: str | None = None # Variável para controlar o timer da busca (Debounce)
+        self.current_screen_function: callable | None = None
+        self.current_screen_args: tuple = ()
+        self.current_screen_kwargs: dict = {}
         
         # Configuração do Ícone da Janela
         # Tenta carregar o ícone usando o caminho seguro
@@ -59,13 +62,13 @@ class AppHotelLTS(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Sidebar
-        self.sidebar = ctk.CTkFrame(self, width=180, corner_radius=0, fg_color=self.colors["verde"])
+        self.sidebar = ctk.CTkFrame(self, width=180, corner_radius=0, fg_color=self.colors["sidebar_bg"])
         # Sidebar começa oculta até o login
         self.sidebar.pack_propagate(False)
         
-        ctk.CTkLabel(self.sidebar, text="H-SANTOS", font=("Times New Roman", 24, "bold"), text_color=self.colors["dourado"]).pack(pady=30)
+        ctk.CTkLabel(self.sidebar, text="H-SANTOS", font=("Arial", 22, "bold"), text_color=self.colors["verde"]).pack(pady=30)
         
-        btn_opts = {"height": 40, "anchor": "w", "fg_color": "transparent", "text_color": "white", "hover_color": self.colors["dourado"]}
+        btn_opts = {"height": 40, "anchor": "w", "fg_color": "transparent", "text_color": self.colors["sidebar_txt"], "hover_color": self.colors["verde_hover"]}
         ctk.CTkButton(self.sidebar, text="🏠 Home", command=self.tela_home, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text="👥 Hóspedes", command=self.tela_hospedes, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text="💰 Financeiro", command=self.tela_financeiro, **btn_opts).pack(pady=5, fill="x", padx=10)
@@ -75,7 +78,14 @@ class AppHotelLTS(ctk.CTk):
         
         # Botão de Logout no final da sidebar
         ctk.CTkFrame(self.sidebar, fg_color="transparent").pack(expand=True, fill="y")
-        ctk.CTkButton(self.sidebar, text=" 🚪 Sair", command=self.logout, **btn_opts).pack(pady=20, fill="x", padx=10)
+        
+        # Botão de Atualização (Inicia oculto)
+        self.btn_update = ctk.CTkButton(self.sidebar, text="⬇️ Atualização", fg_color=self.colors["dourado"], 
+                                        hover_color=self.colors["dourado_hover"], text_color="#1e293b", anchor="center")
+        # Não fazemos pack aqui, apenas quando houver update
+
+        self.btn_sair = ctk.CTkButton(self.sidebar, text=" 🚪 Sair", command=self.logout, **btn_opts)
+        self.btn_sair.pack(pady=20, fill="x", padx=10)
 
         self.main_frame = ctk.CTkFrame(self, corner_radius=15)
         self.main_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
@@ -95,10 +105,10 @@ class AppHotelLTS(ctk.CTk):
         is_dark = ctk.get_appearance_mode() == "Dark"
         
         # Cores para tema claro e escuro
-        bg_color = "#2b2b2b" if is_dark else "#ffffff"
-        fg_color = "#dce4ee" if is_dark else "#333333"
-        field_bg = "#343638" if is_dark else "#ffffff"
-        header_bg = "#3c3f41" if is_dark else "#e5e5e5"
+        bg_color = "#1f2937" if is_dark else "#ffffff" # Gray 800 vs White
+        fg_color = "#f3f4f6" if is_dark else "#1f2937" # Gray 100 vs Gray 800
+        field_bg = "#374151" if is_dark else "#f8fafc" # Gray 700 vs Slate 50
+        header_bg = "#111827" if is_dark else "#e2e8f0" # Gray 900 vs Slate 200
         selected_fg = "#ffffff"
 
         style.configure("Treeview", 
@@ -117,19 +127,19 @@ class AppHotelLTS(ctk.CTk):
         # Cores para tema claro e escuro
         if is_dark:
             # Acessa a cor do tema (índice 1 para Dark Mode)
-            odd_bg = ctk.ThemeManager.theme["CTkFrame"]["fg_color"][1]
-            even_bg = ctk.ThemeManager.theme["CTkFrame"]["top_fg_color"][1]
+            odd_bg = "#1f2937" # Gray 800
+            even_bg = "#2d3748" # Gray 750
         else:
-            odd_bg = "#f2f2f2"
+            odd_bg = "#f8fafc" # Slate 50
             even_bg = "#ffffff"
         
         tree.tag_configure('odd', background=odd_bg)
         tree.tag_configure('even', background=even_bg)
-        tree.tag_configure('saida', foreground='#e74c3c')
-        tree.tag_configure('multa', foreground='#f1c40f')
-        tree.tag_configure('pagamento_multa', foreground='#2ecc71')
-        tree.tag_configure('seta_subiu', foreground='#e74c3c') # Vermelho
-        tree.tag_configure('seta_desceu', foreground='#2ecc71') # Verde
+        tree.tag_configure('saida', foreground=self.colors["vermelho"])
+        tree.tag_configure('multa', foreground=self.colors["dourado"])
+        tree.tag_configure('pagamento_multa', foreground=self.colors["verde"])
+        tree.tag_configure('seta_subiu', foreground=self.colors["vermelho"])
+        tree.tag_configure('seta_desceu', foreground=self.colors["verde"])
 
     def on_closing(self):
         """Encerra o processo de forma limpa"""
@@ -165,11 +175,19 @@ class AppHotelLTS(ctk.CTk):
                 tem_update, nova_versao, url = self.core.verificar_atualizacao()
                 if tem_update:
                     # Agendamos a chamada do messagebox na thread principal
-                    self.after(0, self.propor_atualizacao, nova_versao, url)
+                    self.after(0, self.mostrar_botao_update, nova_versao, url)
             except Exception as e:
                 print(f"Erro ao verificar atualização: {e}") # Log silencioso no console
 
         threading.Thread(target=_task, daemon=True).start()
+
+    def mostrar_botao_update(self, nova_versao, url):
+        """Exibe o botão de atualização na sidebar"""
+        self.btn_update.configure(
+            text=f"⬇️ Atualizar v{nova_versao}", 
+            command=lambda: self.propor_atualizacao(nova_versao, url)
+        )
+        self.btn_update.pack(before=self.btn_sair, pady=10, fill="x", padx=10)
 
     def propor_atualizacao(self, nova_versao, url):
         """Mostra um messagebox para o usuário e inicia o download se aceito."""
@@ -213,6 +231,34 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: [janela_progresso.destroy(), messagebox.showerror("Erro de Atualização", f"Não foi possível concluir a atualização:\n{e}")])
 
         threading.Thread(target=download_task, daemon=True).start()
+
+    def verificar_update_manual(self):
+        """Verifica manualmente por atualizações e informa o usuário."""
+        self.configure(cursor="watch")
+        self.update_idletasks()
+
+        def _task():
+            try:
+                # Apenas verifica se estiver rodando o executável compilado
+                if not getattr(sys, 'frozen', False):
+                    self.after(0, lambda: messagebox.showinfo("Aviso", "A verificação de atualização só funciona no aplicativo compilado (instalador)."))
+                    return
+
+                tem_update, nova_versao, url = self.core.verificar_atualizacao()
+
+                if tem_update:
+                    # Agendamos a chamada do messagebox na thread principal
+                    self.after(0, self.propor_atualizacao, nova_versao, url)
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Atualização", "Você já está usando a versão mais recente."))
+            
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Erro", f"Não foi possível verificar por atualizações:\n{e}"))
+            finally:
+                # Garante que o cursor volte ao normal
+                self.after(0, lambda: self.configure(cursor="arrow"))
+
+        threading.Thread(target=_task, daemon=True).start()
 
     # =========================================================================
     # 2. AUTENTICAÇÃO
@@ -261,7 +307,7 @@ class AppHotelLTS(ctk.CTk):
         self.current_screen_kwargs = {}
 
         self.limpar_tela()
-        ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Times New Roman", 28, "bold"), text_color=self.colors["verde"]).pack(pady=60)
+        ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Arial", 28, "bold"), text_color=self.colors["verde"]).pack(pady=60)
         grid = ctk.CTkFrame(self.main_frame, fg_color="transparent"); grid.pack()
         btns = [("👥 HÓSPEDES", self.tela_hospedes, self.colors["verde"]),
                 ("💰 FINANCEIRO", self.tela_financeiro, self.colors["dourado"]), ("🛒 COMPRAS", self.tela_compras, "#e67e22"), ("⚙️ AJUSTES", self.tela_config, "#7f8c8d")]
@@ -350,8 +396,8 @@ class AppHotelLTS(ctk.CTk):
         f_esq = ctk.CTkFrame(self.main_frame, fg_color="transparent"); f_esq.grid(row=0, column=0, sticky="nsew", padx=10)
         top = ctk.CTkFrame(f_esq, fg_color="transparent"); top.pack(fill="x", pady=5)
         ctk.CTkButton(top, text="← Voltar", width=80, command=self.tela_hospedes).pack(side="left")
-        ctk.CTkButton(top, text="💬 WhatsApp", fg_color="#25D366", width=100, command=lambda: self.enviar_whatsapp(nome, doc)).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="📄 Extrato", fg_color="#2c3e50", width=80, command=lambda: self.emitir_extrato(nome, doc)).pack(side="right", padx=5)
+        ctk.CTkButton(top, text="💬 WhatsApp", fg_color="#25D366", hover_color="#128C7E", width=100, command=lambda: self.enviar_whatsapp(nome, doc)).pack(side="right", padx=5)
+        ctk.CTkButton(top, text=" Extrato", fg_color="#2c3e50", width=80, command=lambda: self.emitir_extrato(nome, doc)).pack(side="right", padx=5)
         ctk.CTkButton(top, text="📄 Ticket Multas", fg_color="#c0392b", width=80, command=lambda: self.emitir_extrato_multas(nome, doc)).pack(side="right", padx=5)
         ctk.CTkButton(top, text="📄 PDF Voucher", fg_color=self.colors["verde"], width=100, command=lambda: self.emitir_voucher(nome, doc)).pack(side="right", padx=5)
         ctk.CTkLabel(f_esq, text=f"Histórico Financeiro: {nome}", font=("Arial", 20, "bold")).pack(pady=10)
@@ -359,7 +405,7 @@ class AppHotelLTS(ctk.CTk):
         form = ctk.CTkFrame(f_esq, fg_color="transparent"); form.pack(fill="x", pady=5)
         ctk.CTkButton(form, text="Adicionar Crédito", fg_color=self.colors["verde"], command=lambda: self.janela_add_credito(doc, nome)).pack(side="left", padx=5)
         ctk.CTkButton(form, text="Utilizar Crédito", fg_color=self.colors["vermelho"], command=lambda: self.janela_usar_credito(doc, nome)).pack(side="left", padx=5)
-        ctk.CTkButton(form, text="Lançar Multa", fg_color=self.colors["dourado"], command=lambda: self.janela_add_multa(doc, nome)).pack(side="left", padx=5)
+        ctk.CTkButton(form, text="Lançar Multa", fg_color=self.colors["dourado"], text_color="black", command=lambda: self.janela_add_multa(doc, nome)).pack(side="left", padx=5)
         ctk.CTkButton(form, text="Pagar Multa", fg_color="#27ae60", command=lambda: self.janela_pagar_multa(doc, nome)).pack(side="left", padx=5)
 
         self.tree_z = ttk.Treeview(f_esq, columns=("T", "V", "D", "C", "U"), show='headings', height=10)
@@ -476,8 +522,8 @@ class AppHotelLTS(ctk.CTk):
         if ctk.get_appearance_mode() == "Dark":
             plt.style.use('dark_background')
             plt.rcParams.update({
-                "figure.facecolor": "#2b2b2b",
-                "axes.facecolor": "#2b2b2b",
+                "figure.facecolor": "#1f2937", # Match new bg
+                "axes.facecolor": "#1f2937",
                 "text.color": "white",
                 "axes.labelcolor": "white",
                 "xtick.color": "white",
@@ -542,7 +588,7 @@ class AppHotelLTS(ctk.CTk):
         if dados_g:
             fig, ax = plt.subplots(figsize=(4,3), dpi=85)
             ax.pie([x[1] for x in dados_g], labels=[x[0] for x in dados_g], autopct='%1.1f%%')
-            FigureCanvasTkAgg(fig, master=gr).get_tk_widget().pack(pady=10)
+            FigureCanvasTkAgg(fig, master=gr).get_tk_widget().pack(pady=10, fill="both", expand=True)
         
         tab = ctk.CTkFrame(inf); tab.pack(side="right", fill="both", expand=True, padx=5)
         ctk.CTkLabel(tab, text=f"Detalhamento Alerta ({dias_config} dias)", font=("Arial", 12, "bold")).pack(pady=5)
@@ -735,6 +781,12 @@ class AppHotelLTS(ctk.CTk):
             if not raw_prod or not qtd or not val: raise Exception("Preencha todos os campos.")
             
             prod_digitado = raw_prod.upper().strip()
+            
+            # Verifica se o produto já existe na lista atual para evitar duplicidade
+            itens_atuais = self.core.get_itens_lista(self.lista_selecionada_id)
+            if any(item['produto'] == prod_digitado for item in itens_atuais):
+                raise Exception(f"O produto '{prod_digitado}' já está nesta lista.")
+
             # Validação de produto existente
             produtos_existentes = [p.upper() for p in self.lista_produtos_cache]
             if prod_digitado not in produtos_existentes:
@@ -797,35 +849,6 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: self.configure(cursor="arrow"))
         threading.Thread(target=_task, daemon=True).start()
 
-    def enviar_whatsapp_compras(self):
-        # Filtra compras pela data selecionada no campo de data
-        data_str = self.e_data_compras.get()
-        try:
-            data_iso = datetime.strptime(data_str, "%d/%m/%Y").strftime("%Y-%m-%d")
-        except:
-            data_iso = datetime.now().strftime("%Y-%m-%d")
-            
-        todas_compras = self.core.get_historico_compras()
-        compras_dia = [c for c in todas_compras if c['data_compra'] == data_iso]
-
-        if not compras_dia:
-            messagebox.showwarning("Aviso", f"Não há compras registradas para {data_str}.")
-            return
-
-        msg_parts = [f"*RELATÓRIO DE COMPRAS - {data_str}*"]
-        for c in compras_dia:
-            seta = ""
-            if c['tendencia'] == 'subiu': seta = "🔺"
-            elif c['tendencia'] == 'desceu': seta = "🔻"
-
-            parte = f"\n\n*Produto:* {c['produto']}\n*Qtd:* {c['quantidade']} | *Unit:* R$ {c['valor_unitario']:.2f} {seta}"
-            msg_parts.append(parte)
-        
-        msg = "".join(msg_parts)
-        fone_fixo = "19997597503"
-        link = f"https://web.whatsapp.com/send?phone=55{fone_fixo}&text={quote(msg)}"
-        webbrowser.open(link)
-
     # =========================================================================
     # 7. MÓDULO LANÇAMENTOS (Central)
     # =========================================================================
@@ -859,7 +882,7 @@ class AppHotelLTS(ctk.CTk):
 
         ctk.CTkButton(nav, text="🖨️ Fechamento Dia", width=140, fg_color="#2c3e50", command=acao_fechamento).pack(side="right", padx=5)
         ctk.CTkButton(nav, text="📥 Exportar Extrato", width=160, fg_color=self.colors["verde"], command=acao_exportar).pack(side="right", padx=5)
-        ctk.CTkButton(nav, text="+ Novo Lançamento", width=160, fg_color=self.colors["dourado"], hover_color=self.colors["dourado_hover"], command=self.janela_novo_lancamento_central).pack(side="right")
+        ctk.CTkButton(nav, text="+ Novo Lançamento", width=160, fg_color=self.colors["dourado"], text_color="black", hover_color=self.colors["dourado_hover"], command=self.janela_novo_lancamento_central).pack(side="right")
 
         # Sistema de Abas
         tabview = ctk.CTkTabview(self.main_frame)
@@ -1014,10 +1037,20 @@ class AppHotelLTS(ctk.CTk):
         else:
             self.config_user_view()
 
+        # --- Frame de Versão e Atualização (Visível para todos) ---
+        f_versao = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        f_versao.pack(side="bottom", fill="x", padx=10, pady=10)
+
+        ctk.CTkLabel(f_versao, text=f"Versão do Sistema: {self.core.versao_atual}").pack(side="left", padx=10)
+        ctk.CTkButton(f_versao, text="Verificar Atualizações", command=self.verificar_update_manual).pack(side="right", padx=10)
+
     def config_admin_view(self):
         # --- Sistema de Abas para melhor organização ---
         tabview = ctk.CTkTabview(self.main_frame, segmented_button_selected_color=self.colors["verde"])
         tabview.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Inicializa variáveis para evitar erro de referência (unbound variable)
+        tab_sistema = tab_usuarios = tab_categorias = tab_auditoria = tab_produtos = None
         
         # Adiciona abas conforme permissão
         if self.current_user['is_admin']:
@@ -1259,7 +1292,7 @@ class AppHotelLTS(ctk.CTk):
         f_tipo = ctk.CTkFrame(f_detalhes, fg_color="transparent"); f_tipo.pack(pady=5)
         
         opcoes_radio = [("Crédito", "ENTRADA", self.colors["verde"], 0, 0), ("Uso (Baixa)", "SAIDA", self.colors["vermelho"], 0, 1),
-                        ("Multa", "MULTA", self.colors["dourado"], 1, 0), ("Pgto Multa", "PAGAMENTO_MULTA", "#27ae60", 1, 1)]
+                        ("Multa", "MULTA", self.colors["dourado"], 1, 0), ("Pgto Multa", "PAGAMENTO_MULTA", self.colors["verde_hover"], 1, 1)]
         
         for txt, val, col, r, c in opcoes_radio:
             ctk.CTkRadioButton(f_tipo, text=txt, variable=tipo_var, value=val, fg_color=col, command=atualizar_opcoes_categoria).grid(row=r, column=c, padx=5, pady=5)

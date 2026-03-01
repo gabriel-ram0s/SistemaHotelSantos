@@ -5,22 +5,23 @@ import shutil
 import csv
 import secrets
 import hashlib
+from typing import Any, Dict, List, Optional, Tuple
 import sys
 import socket
 import subprocess
-import time
 try:
     import requests
 except ImportError:
     requests = None
 
 try:
-    from fpdf import FPDF
+    from fpdf import FPDF as _FPDF
+    FPDF = _FPDF
 except ImportError:
     FPDF = None
 
 class SistemaCreditos:
-    def __init__(self, db_name="hotel.db"):
+    def __init__(self, db_name: str = "hotel.db"):
         # --- CORREÇÃO DE DIRETÓRIO (APPDATA) ---
         # Define o caminho base na pasta do usuário para evitar erros de permissão em Program Files
         if db_name == ":memory:":
@@ -42,12 +43,13 @@ class SistemaCreditos:
             "contato": "Tel: (19) 3651-3297 / Whats: (19) 99759-7503",
             "email": "hotelsantoss@hotmail.com"
         }
-        self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
+        self.conn: sqlite3.Connection = sqlite3.connect(self.db_name, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self.cursor = self.conn.cursor()
+        self.conn.text_factory = str # Garante que strings sejam tratadas como UTF-8/Unicode
+        self.cursor: sqlite3.Cursor = self.conn.cursor()
         self.criar_tabelas()
 
-    def criar_tabelas(self):
+    def criar_tabelas(self) -> None:
         with self.conn:
             self.cursor.execute('CREATE TABLE IF NOT EXISTS hospedes (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, documento TEXT UNIQUE NOT NULL)')
             self.cursor.execute('CREATE TABLE IF NOT EXISTS categorias (nome TEXT PRIMARY KEY)')
@@ -144,7 +146,7 @@ class SistemaCreditos:
                 pass_hash = self._hash_password('132032', salt)
                 self.cursor.execute("INSERT INTO usuarios (username, password, is_admin, can_change_dates, can_manage_products, salt) VALUES (?, ?, ?, ?, ?, ?)", ('gabriel', pass_hash, 1, 1, 1, salt))
 
-    def fazer_backup(self):
+    def fazer_backup(self) -> str:
         backup_dir = os.path.join(self.base_dir, "backups")
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
@@ -161,7 +163,7 @@ class SistemaCreditos:
         
         return dst
 
-    def restaurar_backup(self, arquivo_backup, usuario_acao="Sistema"):
+    def restaurar_backup(self, arquivo_backup: str, usuario_acao: str = "Sistema") -> None:
         if not os.path.exists(arquivo_backup): raise Exception("Arquivo não encontrado")
         self.conn.close() # Fecha conexão atual para permitir sobrescrita
         shutil.copy2(arquivo_backup, self.db_name)
@@ -171,7 +173,7 @@ class SistemaCreditos:
         self.criar_tabelas() # Garante que tabelas novas existam
         self.registrar_log(usuario_acao, "RESTAURAR_BACKUP", f"Restaurado de: {arquivo_backup}")
 
-    def otimizar_banco(self):
+    def otimizar_banco(self) -> None:
         """Executa VACUUM para limpar espaço não utilizado e desfragmentar o banco."""
         # VACUUM não pode rodar dentro de uma transação, então isolamos a execução
         old_iso = self.conn.isolation_level
@@ -184,10 +186,10 @@ class SistemaCreditos:
     # =========================================================================
     # 2. AUTENTICAÇÃO & USUÁRIOS
     # =========================================================================
-    def _hash_password(self, password, salt=""):
+    def _hash_password(self, password: str, salt: str = "") -> str:
         return hashlib.sha256((str(password) + str(salt)).encode()).hexdigest()
 
-    def verificar_login(self, username, password):
+    def verificar_login(self, username: str, password: str) -> Optional[sqlite3.Row]:
         self.cursor.execute("SELECT password, salt FROM usuarios WHERE username = ?", (username,))
         user_data = self.cursor.fetchone()
         if not user_data:
@@ -216,18 +218,18 @@ class SistemaCreditos:
         
         return None
 
-    def get_usuarios(self):
+    def get_usuarios(self) -> List[sqlite3.Row]:
         self.cursor.execute("SELECT * FROM usuarios")
         return self.cursor.fetchall()
 
-    def salvar_usuario(self, username, password, is_admin, can_change_dates, can_manage_products, usuario_acao="Sistema"):
+    def salvar_usuario(self, username: str, password: str, is_admin: bool, can_change_dates: bool, can_manage_products: bool, usuario_acao: str = "Sistema") -> None:
         salt = secrets.token_hex(16)
         password_hash = self._hash_password(password, salt)
         with self.conn:
             self.cursor.execute("INSERT OR REPLACE INTO usuarios (username, password, is_admin, can_change_dates, can_manage_products, salt) VALUES (?, ?, ?, ?, ?, ?)", (username, password_hash, int(is_admin), int(can_change_dates), int(can_manage_products), salt))
         self.registrar_log(usuario_acao, "SALVAR_USUARIO", f"Usuario alvo: {username} | Admin: {is_admin}")
 
-    def excluir_usuario(self, username, usuario_acao="Sistema"):
+    def excluir_usuario(self, username: str, usuario_acao: str = "Sistema") -> None:
         with self.conn:
             self.cursor.execute("DELETE FROM usuarios WHERE username = ?", (username,))
         self.registrar_log(usuario_acao, "EXCLUIR_USUARIO", f"Usuario alvo: {username}")
@@ -235,11 +237,11 @@ class SistemaCreditos:
     # =========================================================================
     # 3. MÓDULO HÓSPEDES
     # =========================================================================
-    def get_hospede(self, doc):
+    def get_hospede(self, doc: str) -> Optional[sqlite3.Row]:
         self.cursor.execute("SELECT * FROM hospedes WHERE documento = ?", (doc,))
         return self.cursor.fetchone()
 
-    def cadastrar_hospede(self, nome, doc, telefone="", email="", usuario_acao="Sistema"):
+    def cadastrar_hospede(self, nome: str, doc: str, telefone: str = "", email: str = "", usuario_acao: str = "Sistema") -> None:
         doc_limpo = str(doc).strip()
         if not self._validar_cpf_cnpj(doc_limpo):
             raise Exception("Documento inválido (CPF/CNPJ incorreto). Verifique os dígitos.")
@@ -255,7 +257,7 @@ class SistemaCreditos:
                                    (nome.upper().strip(), doc_limpo, telefone, email))
                 self.registrar_log(usuario_acao, "CADASTRAR_HOSPEDE", f"Doc: {doc_limpo}")
 
-    def buscar_filtrado(self, termo="", filtro="todos"):
+    def buscar_filtrado(self, termo: str = "", filtro: str = "todos") -> List[Tuple[str, str, float]]:
         # Remove caracteres especiais da busca para evitar erros de SQL ou formatação
         termo_limpo = str(termo).strip()
         self.cursor.execute("SELECT nome, documento FROM hospedes WHERE nome LIKE ? OR documento LIKE ?", (f'%{termo_limpo}%', f'%{termo_limpo}%'))
@@ -268,13 +270,13 @@ class SistemaCreditos:
             res.append((h['nome'], h['documento'], s))
         return res
 
-    def limpar_valor(self, valor):
+    def limpar_valor(self, valor: Any) -> float:
         if isinstance(valor, (int, float)):
             return float(valor)
         if not valor or str(valor).strip() == "": return 0.0
         return float(str(valor).replace('.', '').replace(',', '.').strip())
 
-    def _processar_saldo(self, doc):
+    def _processar_saldo(self, doc: str) -> Tuple[float, str, bool]:
         self.cursor.execute("SELECT tipo, valor, data_vencimento FROM historico_zebra WHERE documento = ? ORDER BY id ASC", (doc,))
         movs = self.cursor.fetchall()
         entradas = [{"valor": m['valor'], "venc": m['data_vencimento']} for m in movs if m['tipo'] == 'ENTRADA']
@@ -297,10 +299,10 @@ class SistemaCreditos:
             prox_venc = datetime.strptime(prox_venc, "%Y-%m-%d").strftime("%d/%m/%Y")
         return round(max(0, saldo), 2), prox_venc, bloqueado
 
-    def get_saldo_info(self, doc):
+    def get_saldo_info(self, doc: str) -> Tuple[float, str, bool]:
         return self._processar_saldo(doc)
 
-    def _validar_cpf_cnpj(self, doc):
+    def _validar_cpf_cnpj(self, doc: str) -> bool:
         """Valida CPF (11) ou CNPJ (14). Outros tamanhos são aceitos como RG/Passaporte se > 3 chars."""
         numeros = ''.join(filter(str.isdigit, str(doc)))
         
@@ -330,7 +332,7 @@ class SistemaCreditos:
     # =========================================================================
     # 4. MÓDULO FINANCEIRO (Movimentações, Saldo, Multas)
     # =========================================================================
-    def adicionar_movimentacao(self, doc, valor, categoria, tipo, obs="", usuario="Sistema"):
+    def adicionar_movimentacao(self, doc: str, valor: Any, categoria: str, tipo: str, obs: str = "", usuario: str = "Sistema") -> None:
         v_float = self.limpar_valor(valor)
         doc_limpo = str(doc).strip()
 
@@ -352,7 +354,7 @@ class SistemaCreditos:
                                (doc_limpo, tipo, v_float, categoria, data_hj.strftime("%Y-%m-%d"), venc, obs, usuario))
         self.registrar_log(usuario, f"ADD_MOV_{tipo}", f"Doc: {doc_limpo}, Valor: {v_float}")
 
-    def adicionar_multa(self, doc, valor, motivo, obs="", usuario="Sistema"):
+    def adicionar_multa(self, doc: str, valor: Any, motivo: str, obs: str = "", usuario: str = "Sistema") -> None:
         v_float = self.limpar_valor(valor)
         doc_limpo = str(doc).strip()
         with self.conn:
@@ -361,7 +363,7 @@ class SistemaCreditos:
                                (doc_limpo, 'MULTA', v_float, motivo, data_hj, obs, usuario))
         self.registrar_log(usuario, "ADD_MULTA", f"Doc: {doc_limpo}, Valor: {v_float}, Motivo: {motivo}")
 
-    def pagar_multa(self, doc, valor, forma_pagamento, obs="", usuario="Sistema"):
+    def pagar_multa(self, doc: str, valor: Any, forma_pagamento: str, obs: str = "", usuario: str = "Sistema") -> None:
         v_float = self.limpar_valor(valor)
         doc_limpo = str(doc).strip()
         
@@ -375,10 +377,7 @@ class SistemaCreditos:
                                (doc_limpo, 'PAGAMENTO_MULTA', v_float, forma_pagamento, data_hj, obs, usuario))
         self.registrar_log(usuario, "PAGAR_MULTA", f"Doc: {doc_limpo}, Valor: {v_float}")
 
-    def get_saldo_info(self, doc):
-        return self._processar_saldo(doc)
-
-    def get_divida_multas(self, doc):
+    def get_divida_multas(self, doc: str) -> float:
         self.cursor.execute("SELECT SUM(valor) FROM historico_zebra WHERE documento = ? AND tipo = 'MULTA'", (doc,))
         res_m = self.cursor.fetchone()
         total_m = res_m[0] if res_m and res_m[0] is not None else 0.0
@@ -389,7 +388,7 @@ class SistemaCreditos:
         
         return total_m - total_p
 
-    def get_devedores_multas(self):
+    def get_devedores_multas(self) -> List[Tuple[str, str, Optional[str], float]]:
         """Retorna lista de clientes que possuem dívida de multas > 0"""
         self.cursor.execute("SELECT nome, documento, telefone FROM hospedes")
         todos = self.cursor.fetchall()
@@ -400,11 +399,11 @@ class SistemaCreditos:
                 devedores.append((h['nome'], h['documento'], h['telefone'], divida))
         return sorted(devedores, key=lambda x: x[3], reverse=True) # Ordena por maior dívida
 
-    def get_historico_detalhado(self, doc):
+    def get_historico_detalhado(self, doc: str) -> List[Dict[str, Any]]:
         self.cursor.execute("SELECT tipo, valor, data_acao, categoria, obs, usuario FROM historico_zebra WHERE documento = ? ORDER BY id DESC", (doc,))
         return [dict(r) for r in self.cursor.fetchall()]
 
-    def get_historico_global(self, filtro="", limite=100, tipos=None):
+    def get_historico_global(self, filtro: str = "", limite: int = 100, tipos: Optional[Tuple[str, ...]] = None) -> List[Dict[str, Any]]:
         """
         Retorna histórico de todos os clientes com ID para permitir exclusão.
         :param filtro: Termo para buscar em nome ou documento.
@@ -441,7 +440,7 @@ class SistemaCreditos:
         self.cursor.execute(query, params)
         return [dict(r) for r in self.cursor.fetchall()]
 
-    def excluir_movimentacao(self, id_mov, usuario_acao="Sistema"):
+    def excluir_movimentacao(self, id_mov: int, usuario_acao: str = "Sistema") -> None:
         with self.conn:
             self.cursor.execute("SELECT * FROM historico_zebra WHERE id = ?", (id_mov,))
             mov = self.cursor.fetchone()
@@ -449,7 +448,7 @@ class SistemaCreditos:
             self.cursor.execute("DELETE FROM historico_zebra WHERE id = ?", (id_mov,))
         self.registrar_log(usuario_acao, "EXCLUIR_MOVIMENTACAO", f"ID: {id_mov} | Doc: {mov['documento']} | Valor: {mov['valor']} | Tipo: {mov['tipo']}")
 
-    def atualizar_data_vencimento_manual(self, doc, data_br, valor, data_mov, usuario_acao="Sistema"):
+    def atualizar_data_vencimento_manual(self, doc: str, data_br: str, valor: Any, data_mov: str, usuario_acao: str = "Sistema") -> None:
         d_iso = datetime.strptime(data_br, "%d/%m/%Y").strftime("%Y-%m-%d")
         dm_iso = datetime.strptime(data_mov, "%d/%m/%Y").strftime("%Y-%m-%d")
         with self.conn:
@@ -460,7 +459,7 @@ class SistemaCreditos:
     # =========================================================================
     # 5. RELATÓRIOS & DASHBOARD
     # =========================================================================
-    def gerar_pdf_voucher(self, nome_hospede, doc_hospede):
+    def gerar_pdf_voucher(self, nome_hospede: str, doc_hospede: str) -> str:
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         saldo, venc, bloqueado = self._processar_saldo(doc_hospede)
         if saldo <= 0: raise Exception("Sem saldo para voucher.")
@@ -475,7 +474,9 @@ class SistemaCreditos:
         pdf.cell(0, 5, f"CNPJ: {self.empresa['cnpj']} | {self.empresa['contato']}", ln=True, align='C')
         pdf.ln(10); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(10)
         pdf.set_font("Arial", 'B', 14); pdf.cell(0, 10, "VOUCHER DE CREDITO", ln=True, align='C'); pdf.ln(5)
-        pdf.set_font("Arial", 'B', 11); pdf.cell(0, 8, f"HOSPEDE: {nome_hospede.upper()}", ln=True); pdf.cell(0, 8, f"DOCUMENTO: {doc_hospede}", ln=True); pdf.ln(5)
+        # Tratamento de acentos para FPDF (UTF-8 -> Latin-1)
+        nome_fmt = nome_hospede.upper().encode('latin-1', 'replace').decode('latin-1')
+        pdf.set_font("Arial", 'B', 11); pdf.cell(0, 8, f"HOSPEDE: {nome_fmt}", ln=True); pdf.cell(0, 8, f"DOCUMENTO: {doc_hospede}", ln=True); pdf.ln(5)
         pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", 'B', 14)
         pdf.cell(0, 15, f" VALOR: R$ {saldo:.2f}", border=1, ln=True, fill=True)
         pdf.set_font("Arial", 'I', 11); pdf.cell(0, 10, f" VALIDADE: {venc}", border=1, ln=True); pdf.ln(10)
@@ -489,7 +490,7 @@ class SistemaCreditos:
             raise Exception(f"O arquivo '{fname}' parece estar aberto. Feche-o e tente novamente.")
         return fname
 
-    def gerar_pdf_extrato(self, nome_hospede, doc_hospede):
+    def gerar_pdf_extrato(self, nome_hospede: str, doc_hospede: str) -> str:
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         hist = self.get_historico_detalhado(doc_hospede)
         pdf = FPDF()
@@ -506,7 +507,8 @@ class SistemaCreditos:
         pdf.ln(5)
         
         pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 8, f"CLIENTE: {nome_hospede.upper()}", ln=True)
+        nome_fmt = nome_hospede.upper().encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(0, 8, f"CLIENTE: {nome_fmt}", ln=True)
         pdf.cell(0, 8, f"DOCUMENTO: {doc_hospede}", ln=True)
         pdf.ln(5)
         
@@ -522,10 +524,11 @@ class SistemaCreditos:
         for h in hist:
             data_br = datetime.strptime(h['data_acao'], "%Y-%m-%d").strftime("%d/%m/%Y")
             pdf.cell(25, 8, data_br, 1, 0, 'C')
-            pdf.cell(25, 8, h['tipo'], 1, 0, 'C')
-            pdf.cell(40, 8, h['categoria'][:18], 1, 0, 'C')
+            pdf.cell(25, 8, h['tipo'].encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
+            pdf.cell(40, 8, h['categoria'][:18].encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
             pdf.cell(30, 8, f"R$ {h['valor']:.2f}", 1, 0, 'C')
-            pdf.cell(0, 8, h['obs'][:40], 1, 1, 'L')
+            obs_fmt = h['obs'][:40].encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(0, 8, obs_fmt, 1, 1, 'L')
             
         pdf.ln(10)
         saldo, _, _ = self._processar_saldo(doc_hospede)
@@ -537,7 +540,7 @@ class SistemaCreditos:
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
 
-    def gerar_pdf_multas(self, nome_hospede, doc_hospede):
+    def gerar_pdf_multas(self, nome_hospede: str, doc_hospede: str) -> str:
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         
         # Busca apenas multas e pagamentos de multas
@@ -560,7 +563,8 @@ class SistemaCreditos:
         pdf.ln(5)
         
         pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 8, f"CLIENTE: {nome_hospede.upper()}", ln=True)
+        nome_fmt = nome_hospede.upper().encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(0, 8, f"CLIENTE: {nome_fmt}", ln=True)
         pdf.cell(0, 8, f"DOCUMENTO: {doc_hospede}", ln=True)
         pdf.ln(5)
         
@@ -578,9 +582,10 @@ class SistemaCreditos:
             tipo_fmt = "MULTA" if h['tipo'] == 'MULTA' else "PAGAMENTO"
             pdf.cell(25, 8, data_br, 1, 0, 'C')
             pdf.cell(35, 8, tipo_fmt, 1, 0, 'C')
-            pdf.cell(40, 8, h['categoria'][:18], 1, 0, 'C')
+            pdf.cell(40, 8, h['categoria'][:18].encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
             pdf.cell(30, 8, f"R$ {h['valor']:.2f}", 1, 0, 'C')
-            pdf.cell(0, 8, h['obs'][:40], 1, 1, 'L')
+            obs_fmt = h['obs'][:40].encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(0, 8, obs_fmt, 1, 1, 'L')
             
         pdf.ln(10)
         divida = self.get_divida_multas(doc_hospede)
@@ -592,7 +597,7 @@ class SistemaCreditos:
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
 
-    def gerar_pdf_fechamento(self, data_iso):
+    def gerar_pdf_fechamento(self, data_iso: str) -> str:
         """Gera um relatório PDF com o balanço financeiro do dia especificado."""
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         
@@ -641,10 +646,12 @@ class SistemaCreditos:
         for m in movs:
             hospede = self.get_hospede(m['documento'])
             nome = hospede['nome'][:25] if hospede else "Desconhecido"
-            pdf.cell(25, 6, m['tipo'], 1, 0, 'C')
-            pdf.cell(80, 6, f"{nome} ({m['documento']})", 1, 0, 'L')
+            nome_fmt = nome.encode('latin-1', 'replace').decode('latin-1')
+            cat_fmt = m['categoria'][:20].encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(25, 6, m['tipo'].encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
+            pdf.cell(80, 6, f"{nome_fmt} ({m['documento']})", 1, 0, 'L')
             pdf.cell(30, 6, f"R$ {m['valor']:.2f}", 1, 0, 'R')
-            pdf.cell(0, 6, m['categoria'][:20], 1, 1, 'L')
+            pdf.cell(0, 6, cat_fmt, 1, 1, 'L')
             
         fname = f"Fechamento_{data_iso}.pdf"
         try: pdf.output(fname)
@@ -654,7 +661,7 @@ class SistemaCreditos:
     # =========================================================================
     # MÓDULO COMPRAS
     # =========================================================================
-    def adicionar_compra(self, data_compra, produto, qtd, valor_unit, obs="", usuario="Sistema", lista_id=None):
+    def adicionar_compra(self, data_compra: str, produto: str, qtd: Any, valor_unit: Any, obs: str = "", usuario: str = "Sistema", lista_id: Optional[int] = None) -> None:
         qtd_float = self.limpar_valor(qtd)
         unit_float = self.limpar_valor(valor_unit)
         total = qtd_float * unit_float
@@ -670,18 +677,18 @@ class SistemaCreditos:
                                (data_iso, produto.upper().strip(), qtd_float, unit_float, total, usuario, obs, lista_id))
         self.registrar_log(usuario, "ADD_COMPRA", f"Prod: {produto} | Total: {total}")
 
-    def criar_lista_compras(self, usuario, obs=""):
+    def criar_lista_compras(self, usuario: str, obs: str = "") -> int:
         data_hj = datetime.now().strftime("%Y-%m-%d")
         with self.conn:
             self.cursor.execute("INSERT INTO listas_compras (data_criacao, status, usuario, obs) VALUES (?, ?, ?, ?)", 
                                (data_hj, 'ABERTA', usuario, obs))
             return self.cursor.lastrowid
 
-    def fechar_lista_compras(self, lista_id):
+    def fechar_lista_compras(self, lista_id: int) -> None:
         with self.conn:
             self.cursor.execute("UPDATE listas_compras SET status = 'FECHADA' WHERE id = ?", (lista_id,))
 
-    def get_listas_resumo(self):
+    def get_listas_resumo(self) -> List[Dict[str, Any]]:
         """Retorna listas com totais calculados"""
         query = '''
             SELECT l.id, l.data_criacao, l.status, l.usuario, COUNT(c.id) as qtd_itens, SUM(c.valor_total) as total_valor
@@ -693,7 +700,7 @@ class SistemaCreditos:
         self.cursor.execute(query)
         return [dict(r) for r in self.cursor.fetchall()]
 
-    def get_itens_lista(self, lista_id):
+    def get_itens_lista(self, lista_id: int) -> List[Dict[str, Any]]:
         self.cursor.execute("SELECT * FROM compras WHERE lista_id = ? ORDER BY id DESC", (lista_id,))
         itens = [dict(r) for r in self.cursor.fetchall()]
         # Calcula tendência
@@ -707,7 +714,7 @@ class SistemaCreditos:
                 elif c['valor_unitario'] < antigo: c['tendencia'] = "desceu"
         return itens
 
-    def get_historico_compras(self, filtro=""):
+    def get_historico_compras(self, filtro: str = "") -> List[Dict[str, Any]]:
         query = "SELECT * FROM compras"
         params = []
         if filtro:
@@ -730,20 +737,20 @@ class SistemaCreditos:
                 elif c['valor_unitario'] < antigo: c['tendencia'] = "desceu"
         return compras
 
-    def adicionar_produto_predefinido(self, nome):
+    def adicionar_produto_predefinido(self, nome: str) -> None:
         if not nome: return
         with self.conn:
             self.cursor.execute("INSERT OR IGNORE INTO produtos (nome) VALUES (?)", (nome.upper().strip(),))
 
-    def remover_produto_predefinido(self, nome):
+    def remover_produto_predefinido(self, nome: str) -> None:
         with self.conn:
             self.cursor.execute("DELETE FROM produtos WHERE nome = ?", (nome,))
 
-    def get_produtos_predefinidos(self):
+    def get_produtos_predefinidos(self) -> List[str]:
         self.cursor.execute("SELECT nome FROM produtos ORDER BY nome")
         return [r['nome'] for r in self.cursor.fetchall()]
 
-    def gerar_pdf_lista(self, lista_id):
+    def gerar_pdf_lista(self, lista_id: int) -> str:
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         
         self.cursor.execute("SELECT * FROM listas_compras WHERE id = ?", (lista_id,))
@@ -776,7 +783,8 @@ class SistemaCreditos:
         pdf.set_font("Arial", '', 9)
         total_geral = 0
         for i in itens:
-            pdf.cell(80, 8, i['produto'][:35], 1, 0, 'L')
+            prod_fmt = i['produto'][:35].encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(80, 8, prod_fmt, 1, 0, 'L')
             pdf.cell(20, 8, str(i['quantidade']), 1, 0, 'C')
             pdf.cell(30, 8, f"{i['valor_unitario']:.2f}", 1, 0, 'R')
             pdf.cell(30, 8, f"{i['valor_total']:.2f}", 1, 0, 'R')
@@ -792,7 +800,7 @@ class SistemaCreditos:
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
 
-    def gerar_pdf_compras(self):
+    def gerar_pdf_compras(self) -> str:
         if not FPDF: raise Exception("Biblioteca FPDF não encontrada.")
         
         compras = self.get_historico_compras() # Pega todas as compras
@@ -841,7 +849,7 @@ class SistemaCreditos:
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
 
-    def get_dados_dash(self):
+    def get_dados_dash(self) -> Tuple[float, float, float, int]:
         self.cursor.execute("SELECT documento FROM hospedes")
         docs = [d['documento'] for d in self.cursor.fetchall()]
         ts, tv, tav = 0, 0, 0
@@ -857,11 +865,11 @@ class SistemaCreditos:
                     elif hoje <= v_iso <= alerta: tav += s
         return ts, tv, tav, len(docs)
 
-    def get_dados_grafico_categorias(self):
+    def get_dados_grafico_categorias(self) -> List[Tuple[str, float]]:
         self.cursor.execute("SELECT categoria, SUM(valor) as total FROM historico_zebra WHERE tipo='ENTRADA' GROUP BY categoria")
         return [(r['categoria'], r['total']) for r in self.cursor.fetchall()]
 
-    def get_dados_grafico_mensal(self):
+    def get_dados_grafico_mensal(self) -> Tuple[List[str], List[float], List[float]]:
         # Gera lista das chaves YYYY-MM dos últimos 6 meses
         meses_alvo = []
         year, month = datetime.now().year, datetime.now().month
@@ -885,7 +893,7 @@ class SistemaCreditos:
         meses_fmt = [datetime.strptime(m, "%Y-%m").strftime("%m/%Y") for m in meses_alvo]
         return meses_fmt, entradas, saidas
 
-    def get_hospedes_vencendo_em_breve(self):
+    def get_hospedes_vencendo_em_breve(self) -> List[Tuple[str, str, str]]:
         hoje = datetime.now().strftime("%Y-%m-%d")
         alerta = (datetime.now() + timedelta(days=self.get_config('alerta_dias'))).strftime("%Y-%m-%d")
         self.cursor.execute("SELECT nome, documento FROM hospedes")
@@ -899,7 +907,7 @@ class SistemaCreditos:
                     res.append((h['nome'], v, f"{s:.2f}"))
         return sorted(res, key=lambda x: x[1])
 
-    def exportar_csv(self):
+    def exportar_csv(self) -> str:
         data = self.buscar_filtrado()
         fname = f"Relatorio_Clientes_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
         with open(fname, mode='w', newline='', encoding='utf-8') as f:
@@ -910,7 +918,7 @@ class SistemaCreditos:
                 writer.writerow([row[0], row[1], f"{row[2]:.2f}".replace('.', ',')])
         return fname
 
-    def exportar_historico_financeiro_csv(self, mes_ano=None):
+    def exportar_historico_financeiro_csv(self, mes_ano: Optional[str] = None) -> str:
         """
         Exporta histórico financeiro.
         :param mes_ano: String no formato 'MM/YYYY' para filtrar. Se None, exporta tudo.
@@ -946,40 +954,40 @@ class SistemaCreditos:
     # =========================================================================
     # 6. CONFIGURAÇÕES & UTILS
     # =========================================================================
-    def get_config(self, chave):
+    def get_config(self, chave: str) -> int:
         self.cursor.execute("SELECT valor FROM configs WHERE chave = ?", (chave,))
         res = self.cursor.fetchone()
-        return res['valor'] if res else 30
+        return res['valor'] if res and res['valor'] is not None else 30
 
-    def set_config(self, chave, valor, usuario_acao="Sistema"):
+    def set_config(self, chave: str, valor: int, usuario_acao: str = "Sistema") -> None:
         antigo = self.get_config(chave)
         with self.conn:
             self.cursor.execute("INSERT OR REPLACE INTO configs (chave, valor) VALUES (?, ?)", (chave, valor))
         self.registrar_log(usuario_acao, "ALTERAR_CONFIG", f"Chave: {chave} | De: {antigo} Para: {valor}")
 
-    def get_categorias(self):
+    def get_categorias(self) -> List[str]:
         self.cursor.execute("SELECT nome FROM categorias ORDER BY nome")
         return [r['nome'] for r in self.cursor.fetchall()]
 
-    def adicionar_categoria(self, nome):
+    def adicionar_categoria(self, nome: str) -> None:
         if not nome: return
         with self.conn:
             self.cursor.execute("INSERT OR IGNORE INTO categorias VALUES (?)", (nome,))
 
-    def remover_categoria(self, nome):
+    def remover_categoria(self, nome: str) -> None:
         with self.conn:
             self.cursor.execute("DELETE FROM categorias WHERE nome = ?", (nome,))
 
-    def get_anotacao(self, doc):
+    def get_anotacao(self, doc: str) -> str:
         self.cursor.execute("SELECT texto FROM anotacoes WHERE documento = ?", (doc,))
         res = self.cursor.fetchone()
         return res['texto'] if res else ""
 
-    def salvar_anotacao(self, doc, texto):
+    def salvar_anotacao(self, doc: str, texto: str) -> None:
         with self.conn:
             self.cursor.execute("INSERT OR REPLACE INTO anotacoes (documento, texto) VALUES (?, ?)", (doc, texto))
 
-    def registrar_log(self, usuario, acao, detalhes=""):
+    def registrar_log(self, usuario: str, acao: str, detalhes: str = "") -> None:
         try: maquina = socket.gethostname()
         except: maquina = "Desconhecido"
         dh = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -987,21 +995,21 @@ class SistemaCreditos:
             self.cursor.execute("INSERT INTO logs_auditoria (data_hora, usuario, acao, detalhes, maquina) VALUES (?,?,?,?,?)", 
                                (dh, usuario, acao, detalhes, maquina))
 
-    def get_logs(self):
+    def get_logs(self) -> List[sqlite3.Row]:
         self.cursor.execute("SELECT * FROM logs_auditoria ORDER BY id DESC LIMIT 100")
         return self.cursor.fetchall()
 
     # =========================================================================
     # 7. AUTO-UPDATE (GITHUB)
     # =========================================================================
-    def _parse_version(self, v):
+    def _parse_version(self, v: str) -> Tuple[int, ...]:
         """Converte string '1.2.3' para tupla (1, 2, 3) para comparação correta."""
         try:
             return tuple(map(int, v.replace("v", "").split(".")))
         except ValueError:
             return (0, 0, 0)
 
-    def verificar_atualizacao(self, repo_usuario="gabriel-ram0s", repo_nome="sistemahotelsantos"):
+    def verificar_atualizacao(self, repo_usuario: str = "gabriel-ram0s", repo_nome: str = "sistemahotelsantos") -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Verifica se há uma nova release no GitHub.
         Retorna (bool_tem_update, nova_versao, url_download)
@@ -1029,21 +1037,24 @@ class SistemaCreditos:
             print(f"Erro ao verificar update: {e}")
             return False, None, None
 
-    def aplicar_atualizacao(self, url_download, nome_executavel="SistemaHotel.exe", progress_callback=None):
+    def aplicar_atualizacao(self, url_download: str, nome_executavel: str = "SistemaHotel.exe", progress_callback: Optional[callable] = None) -> None:
         """
         Baixa o novo executável e cria um script .bat para substituir o atual.
         """
         if not requests: return
         
         try:
-            # 1. Baixar o novo arquivo como 'update_temp.exe'
+            # 1. Baixar o novo arquivo
+            is_windows = os.name == 'nt'
+            temp_name = "update_temp.exe" if is_windows else "update_temp"
+
             r = requests.get(url_download, stream=True, timeout=15)
             r.raise_for_status()
             
             total_size = int(r.headers.get('content-length', 0))
             downloaded_size = 0
             
-            with open("update_temp.exe", 'wb') as f:
+            with open(temp_name, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
                     downloaded_size += len(chunk)
@@ -1051,25 +1062,42 @@ class SistemaCreditos:
                         progress = downloaded_size / total_size
                         progress_callback(progress)
             
-            # 2. Criar script BAT para fazer a troca (pois não podemos deletar o exe em execução)
-            bat_script = f"""
-            @echo off
-            echo Atualizando o sistema... Por favor, aguarde.
-            timeout /t 2 /nobreak > NUL
-            del "{nome_executavel}"
-            ren "update_temp.exe" "{nome_executavel}"
-            start "" "{nome_executavel}"
-            del "%~f0"
-            """
-            with open("updater.bat", "w") as bat:
-                bat.write(bat_script)
-            
-            # 3. Executar o BAT e fechar o programa atual
-            if progress_callback:
-                progress_callback(1.0, "finalizando") # Sinaliza o fim para a GUI
+            # 2. Criar script de atualização e executar
+            if is_windows:
+                bat_script = f"""
+                @echo off
+                echo Atualizando o sistema... Por favor, aguarde.
+                timeout /t 2 /nobreak > NUL
+                del "{nome_executavel}"
+                ren "{temp_name}" "{nome_executavel}"
+                start "" "{nome_executavel}"
+                del "%~f0"
+                """
+                with open("updater.bat", "w") as bat:
+                    bat.write(bat_script)
+                
+                if progress_callback: progress_callback(1.0, "finalizando")
+                subprocess.Popen("updater.bat", shell=True)
+            else:
+                # Linux/Unix
+                os.chmod(temp_name, 0o755)
+                sh_script = f"""#!/bin/bash
+                echo "Atualizando..."
+                sleep 2
+                rm -f "{nome_executavel}"
+                mv "{temp_name}" "{nome_executavel}"
+                chmod +x "{nome_executavel}"
+                ./"{nome_executavel}" &
+                rm -- "$0"
+                """
+                with open("updater.sh", "w") as sh:
+                    sh.write(sh_script)
+                os.chmod("updater.sh", 0o755)
+                
+                if progress_callback: progress_callback(1.0, "finalizando")
+                subprocess.Popen(["/bin/bash", "updater.sh"], start_new_session=True)
 
-            subprocess.Popen("updater.bat", shell=True)
-            sys.exit(0)
+            os._exit(0)
             
         except Exception as e:
             raise Exception(f"Falha ao atualizar: {e}")
