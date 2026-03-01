@@ -34,7 +34,7 @@ class SistemaCreditos:
                 os.makedirs(self.base_dir)
             self.db_name = os.path.join(self.base_dir, db_name)
 
-        self.versao_atual = "4.2.9"  # Versão estável (apenas EXE)
+        self.versao_atual = "4.3.0"  # Versão estável (apenas EXE)
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
@@ -1028,9 +1028,21 @@ class SistemaCreditos:
                 # Comparação simples de string (idealmente usar semantic versioning)
                 if self._parse_version(tag_remota) > self._parse_version(self.versao_atual):
                     assets = dados.get("assets", [])
-                    if assets:
-                        # Pega o primeiro asset (assumindo que é o .exe)
-                        download_url = assets[0]["browser_download_url"]
+                    download_url = None
+                    is_windows = os.name == 'nt'
+
+                    for asset in assets:
+                        name = asset["name"]
+                        url = asset["browser_download_url"]
+                        
+                        if is_windows and name.endswith(".exe"):
+                            download_url = url
+                            break
+                        elif not is_windows and "Linux" in name:
+                            download_url = url
+                            break
+                    
+                    if download_url:
                         return True, tag_remota, download_url
             return False, None, None
         except Exception as e:
@@ -1039,63 +1051,77 @@ class SistemaCreditos:
 
     def aplicar_atualizacao(self, url_download: str, nome_executavel: str = "SistemaHotel.exe", progress_callback: Optional[callable] = None) -> None:
         """
-        Baixa o novo executável e cria um script .bat para substituir o atual.
+        Baixa o novo executável e cria um script para substituí-lo e reiniciar.
         """
         if not requests: return
         
         try:
-            # 1. Baixar o novo arquivo
             is_windows = os.name == 'nt'
-            temp_name = "update_temp.exe" if is_windows else "update_temp"
-
+            
+            # Garante que estamos trabalhando com caminhos absolutos
+            exec_path = os.path.abspath(sys.executable)
+            exec_dir = os.path.dirname(exec_path)
+            exec_name = os.path.basename(exec_path)
+    
+            # Define nomes para o arquivo temporário e o script de atualização
+            temp_suffix = ".exe" if is_windows else ""
+            temp_path = os.path.join(exec_dir, f"update_temp{temp_suffix}")
+            
+            # 1. Baixar o novo arquivo
             r = requests.get(url_download, stream=True, timeout=15)
             r.raise_for_status()
             
             total_size = int(r.headers.get('content-length', 0))
             downloaded_size = 0
             
-            with open(temp_name, 'wb') as f:
+            with open(temp_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
                     downloaded_size += len(chunk)
                     if progress_callback and total_size > 0:
                         progress = downloaded_size / total_size
                         progress_callback(progress)
-            
+        
             # 2. Criar script de atualização e executar
             if is_windows:
+                updater_path = os.path.join(exec_dir, "updater.bat")
                 bat_script = f"""
                 @echo off
                 echo Atualizando o sistema... Por favor, aguarde.
                 timeout /t 2 /nobreak > NUL
-                del "{nome_executavel}"
-                ren "{temp_name}" "{nome_executavel}"
-                start "" "{nome_executavel}"
-                del "%~f0"
+                del "{exec_path}"
+                ren "{temp_path}" "{exec_name}"
+                start "" "{exec_path}"
+                del "{updater_path}"
                 """
-                with open("updater.bat", "w") as bat:
+                with open(updater_path, "w") as bat:
                     bat.write(bat_script)
                 
                 if progress_callback: progress_callback(1.0, "finalizando")
-                subprocess.Popen("updater.bat", shell=True)
+                subprocess.Popen(updater_path, shell=True, cwd=exec_dir)
             else:
                 # Linux/Unix
-                os.chmod(temp_name, 0o755)
+                updater_path = os.path.join(exec_dir, "updater.sh")
+                os.chmod(temp_path, 0o755) # Dá permissão de execução ao novo binário
+                
                 sh_script = f"""#!/bin/bash
                 echo "Atualizando..."
                 sleep 2
-                rm -f "{nome_executavel}"
-                mv "{temp_name}" "{nome_executavel}"
-                chmod +x "{nome_executavel}"
-                ./"{nome_executavel}" &
+                rm -f "{exec_path}"
+                mv "{temp_path}" "{exec_path}"
+                
+                # Lança o novo executável em background, desvinculado do terminal
+                nohup "{exec_path}" >/dev/null 2>&1 &
+                
+                # Auto-deleção do script de atualização
                 rm -- "$0"
                 """
-                with open("updater.sh", "w") as sh:
+                with open(updater_path, "w") as sh:
                     sh.write(sh_script)
-                os.chmod("updater.sh", 0o755)
+                os.chmod(updater_path, 0o755) # Dá permissão de execução ao script
                 
                 if progress_callback: progress_callback(1.0, "finalizando")
-                subprocess.Popen(["/bin/bash", "updater.sh"], start_new_session=True)
+                subprocess.Popen(["/bin/bash", updater_path], cwd=exec_dir, start_new_session=True)
 
             os._exit(0)
             

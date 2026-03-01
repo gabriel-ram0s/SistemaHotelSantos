@@ -14,7 +14,15 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            sep: ';'
+          - os: ubuntu-latest
+            sep: ':'
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout do Código
@@ -77,22 +85,28 @@ jobs:
 
       - name: Compilar Executável (PyInstaller)
         run: |
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico${{ matrix.sep }}." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
+
+      - name: Renomear Executável Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: mv dist/SistemaHotel dist/SistemaHotel_Linux
 
       - name: Compilar Instalador (Inno Setup)
-        if: hashFiles('setup.iss') != ''
+        if: matrix.os == 'windows-latest' && hashFiles('setup.iss') != ''
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: setup.iss
 
       - name: Criar Release no GitHub
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
           body: ${{ steps.tag_version.outputs.changelog }}
           files: |
             dist/SistemaHotel.exe
+            dist/SistemaHotel_Linux
             Output/Instalador_SistemaHotel.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
