@@ -51,37 +51,21 @@ jobs:
           pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow Babel
 
       - name: Atualizar Versão nos Arquivos
-        shell: powershell
         run: |
-          $version = "${{ steps.tag_version.outputs.new_version }}"
-          Write-Host "Aplicando versão $version nos arquivos..."
-
-          # Atualiza sistema_clientes.py
-          $file1 = "sistemahotelsantos/sistema_clientes.py"
-          if (Test-Path $file1) {
-            (Get-Content $file1) | ForEach-Object { 
-              $_ -replace 'self.versao_atual\s*=\s*"[^"]+"', ('self.versao_atual = "' + $version + '"')
-            } | Set-Content $file1 -Encoding UTF8
+          python -c "
+          import sys, re, os
+          version = '${{ steps.tag_version.outputs.new_version }}'
+          files = {
+              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]+\"', f'self.versao_atual = \"{version}\"'),
+              'setup.iss': (r'#define MyAppVersion \"[^\"]+\"', f'#define MyAppVersion \"{version}\"')
           }
-
-          # Atualiza app_gui.py
-          $file2 = "sistemahotelsantos/app_gui.py"
-          if (Test-Path $file2) {
-            (Get-Content $file2) | ForEach-Object { 
-              $_ -replace 'Gestao de Creditos v[0-9.]+', ('Gestao de Creditos v' + $version)
-            } | Set-Content $file2 -Encoding UTF8
-          }
-
-          # Atualiza setup.iss se existir
-          if (Test-Path setup.iss) {
-            (Get-Content setup.iss) | ForEach-Object {
-              if ($_ -match '^\s*#define\s+MyAppVersion\s+') {
-                '#define MyAppVersion "' + $version + '"'
-              } else {
-                $_
-              }
-            } | Set-Content setup.iss -Encoding UTF8
-          }
+          for fpath, (pattern, repl) in files.items():
+              if os.path.exists(fpath):
+                  with open(fpath, 'r', encoding='utf-8') as f: content = f.read()
+                  new_content = re.sub(pattern, repl, content)
+                  with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
+                  print(f'Updated {fpath}')
+          "
 
       - name: Compilar Executável (PyInstaller)
         run: |
@@ -105,8 +89,7 @@ jobs:
           name: Release ${{ steps.tag_version.outputs.new_tag }}
           body: ${{ steps.tag_version.outputs.changelog }}
           files: |
-            dist/SistemaHotel.exe
-            dist/SistemaHotel_Linux
+            dist/SistemaHotel*
             Output/Instalador_SistemaHotel.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
