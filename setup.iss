@@ -3,7 +3,7 @@
 ; ===================================================================
 
 #define MyAppName "Sistema Hotel Santos"
-#define MyAppVersion "4.3.0" 
+#define MyAppVersion "4.7.4" 
 #define MyAppPublisher "Gabriel Ramos"
 #define MyAppURL "https://github.com/gabriel-ram0s/sistemahotelsantos"
 #define MyAppExeName "SistemaHotel.exe"
