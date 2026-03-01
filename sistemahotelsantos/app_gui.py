@@ -2,7 +2,7 @@ import sys
 import os
 
 import customtkinter as ctk
-from tkinter import ttk, messagebox, filedialog, Listbox
+from tkinter import ttk, messagebox, filedialog, Listbox, StringVar
 from sistema_clientes import SistemaCreditos
 from datetime import datetime
 import webbrowser
@@ -19,8 +19,54 @@ class AppHotelLTS(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
 
+        # --- Declaração de Atributos de Instância para Type Hinting ---
+        self.core: SistemaCreditos
+        self.colors: dict[str, str]
+        self.current_user: dict | None = None
+        self.search_job: str | None = None
+        self.current_screen_function: callable | None = None
+        self.current_screen_args: tuple = ()
+        self.current_screen_kwargs: dict = {}
+
+        # Widgets da UI principal
+        self.sidebar: ctk.CTkFrame
+        self.main_frame: ctk.CTkFrame
+        self.btn_update: ctk.CTkButton
+        self.btn_sair: ctk.CTkButton
+
+        # Widgets da tela de Hóspedes
+        self.ent_busca: ctk.CTkEntry
+        self.tree_h: ttk.Treeview
+        self.menu_hospede: ctk.CTkFrame
+
+        # Widgets da tela de Histórico
+        self.tree_z: ttk.Treeview
+
+        # Widgets da tela Financeiro
+        self.ent_busca_lanc: ctk.CTkEntry
+        self.tree_l: ttk.Treeview
+        self.menu_lanc: ctk.CTkFrame
+
+        # Widgets da tela de Compras
+        self.tree_listas: ttk.Treeview
+        self.frame_detalhes: ctk.CTkFrame
+        self.lbl_titulo_lista: ctk.CTkLabel
+        self.frame_acoes_lista: ctk.CTkFrame
+        self.btn_fechar_lista: ctk.CTkButton
+        self.btn_imprimir_lista: ctk.CTkButton
+        self.frame_add_item: ctk.CTkFrame
+        self.lista_produtos_cache: list[str] = []
+        self.e_prod_compras: ctk.CTkEntry
+        self.lb_sugestoes: Listbox
+        self.e_qtd_compras: ctk.CTkEntry
+        self.e_val_compras: ctk.CTkEntry
+        self.tree_itens: ttk.Treeview
+        self.lista_selecionada_id: int | None = None
+        self.lista_selecionada_status: str | None = None
+        # --- Fim da Declaração ---
+
         # Carrega o core e o tema PREVIAMENTE para evitar conflito de cores (Treeview vs CTk)
-        self.core: SistemaCreditos = SistemaCreditos()
+        self.core = SistemaCreditos()
         saved_theme = self.core.get_config('tema')
         ctk.set_appearance_mode("Dark" if saved_theme == 1 else "Light")
         ctk.set_default_color_theme("green")
@@ -45,12 +91,6 @@ class AppHotelLTS(ctk.CTk):
             "sidebar_txt": "#e2e8f0"  # Slate 200
         }
         self.setup_custom_styles()
-        self.current_user: dict | None = None
-        self.search_job: str | None = None # Variável para controlar o timer da busca (Debounce)
-        self.current_screen_function: callable | None = None
-        self.current_screen_args: tuple = ()
-        self.current_screen_kwargs: dict = {}
-        
         # Configuração do Ícone da Janela
         # Tenta carregar o ícone usando o caminho seguro
         try:
@@ -94,7 +134,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 1. SETUP & CORE (Estilos, Configurações Globais)
     # =========================================================================
-    def setup_custom_styles(self):
+    def setup_custom_styles(self) -> None:
         style = ttk.Style()
         # Tenta usar o tema 'clam', que é mais moderno e customizável
         try:
@@ -120,7 +160,7 @@ class AppHotelLTS(ctk.CTk):
         style.configure("Treeview.Heading", background=header_bg, foreground=fg_color, relief="flat", font=("Arial", 11, "bold"))
         style.map("Treeview", background=[("selected", self.colors["verde"])], foreground=[("selected", selected_fg)])
 
-    def configurar_tags_tabela(self, tree):
+    def configurar_tags_tabela(self, tree: ttk.Treeview) -> None:
         """Aplica configurações de cores para linhas pares, ímpares e saídas, adaptando-se ao tema."""
         is_dark = ctk.get_appearance_mode() == "Dark"
         
@@ -141,7 +181,7 @@ class AppHotelLTS(ctk.CTk):
         tree.tag_configure('seta_subiu', foreground=self.colors["vermelho"])
         tree.tag_configure('seta_desceu', foreground=self.colors["verde"])
 
-    def on_closing(self):
+    def on_closing(self) -> None:
         """Encerra o processo de forma limpa"""
         try:
             # Tenta realizar um backup automático silencioso ao fechar
@@ -153,7 +193,7 @@ class AppHotelLTS(ctk.CTk):
         self.destroy()
         sys.exit()
 
-    def limpar_tela(self):
+    def limpar_tela(self) -> None:
         for w in self.main_frame.winfo_children(): w.destroy()
         # Reseta configurações de grid (importante pois a tela de histórico altera isso)
         self.main_frame.grid_columnconfigure(0, weight=1)
@@ -163,7 +203,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 1.5. AUTO-UPDATE
     # =========================================================================
-    def verificar_e_notificar_update(self):
+    def verificar_e_notificar_update(self) -> None:
         """Verifica se há atualizações em uma thread separada e notifica o usuário."""
         def _task():
             try:
@@ -181,7 +221,7 @@ class AppHotelLTS(ctk.CTk):
 
         threading.Thread(target=_task, daemon=True).start()
 
-    def mostrar_botao_update(self, nova_versao, url):
+    def mostrar_botao_update(self, nova_versao: str, url: str) -> None:
         """Exibe o botão de atualização na sidebar"""
         self.btn_update.configure(
             text=f"⬇️ Atualizar v{nova_versao}", 
@@ -189,7 +229,7 @@ class AppHotelLTS(ctk.CTk):
         )
         self.btn_update.pack(before=self.btn_sair, pady=10, fill="x", padx=10)
 
-    def propor_atualizacao(self, nova_versao, url):
+    def propor_atualizacao(self, nova_versao: str, url: str) -> None:
         """Mostra um messagebox para o usuário e inicia o download se aceito."""
         if messagebox.askyesno("Atualização Disponível", 
                                f"Uma nova versão ({nova_versao}) está disponível!\n"
@@ -197,7 +237,7 @@ class AppHotelLTS(ctk.CTk):
                                "O aplicativo será reiniciado."):
             self.iniciar_janela_de_progresso(url)
 
-    def iniciar_janela_de_progresso(self, url):
+    def iniciar_janela_de_progresso(self, url: str) -> None:
         """Cria a janela de progresso e inicia o download."""
         janela_progresso = ctk.CTkToplevel(self)
         janela_progresso.title("Atualizando...")
@@ -232,7 +272,7 @@ class AppHotelLTS(ctk.CTk):
 
         threading.Thread(target=download_task, daemon=True).start()
 
-    def verificar_update_manual(self):
+    def verificar_update_manual(self) -> None:
         """Verifica manualmente por atualizações e informa o usuário."""
         self.configure(cursor="watch")
         self.update_idletasks()
@@ -263,13 +303,13 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 2. AUTENTICAÇÃO
     # =========================================================================
-    def logout(self):
+    def logout(self) -> None:
         """Realiza o logout do usuário"""
         if messagebox.askyesno("Sair", "Tem certeza que deseja sair?"):
             self.current_user = None
             self.tela_login()
 
-    def tela_login(self):
+    def tela_login(self) -> None:
         self.limpar_tela()
         self.sidebar.pack_forget() # Garante que a sidebar esteja oculta
         
@@ -281,7 +321,7 @@ class AppHotelLTS(ctk.CTk):
         eu = ctk.CTkEntry(f, placeholder_text="Usuário", width=200); eu.pack(pady=10)
         ep = ctk.CTkEntry(f, placeholder_text="Senha", show="*", width=200); ep.pack(pady=10)
         
-        def tentar_login(event=None):
+        def tentar_login(event: object | None = None) -> None:
             u = self.core.verificar_login(eu.get(), ep.get())
             if u:
                 self.current_user = u
@@ -301,7 +341,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 3. NAVEGAÇÃO PRINCIPAL
     # =========================================================================
-    def tela_home(self):
+    def tela_home(self) -> None:
         self.current_screen_function = self.tela_home
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
@@ -317,7 +357,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 4. MÓDULO HÓSPEDES (Listagem e Busca)
     # =========================================================================
-    def tela_hospedes(self, filtro="todos"):
+    def tela_hospedes(self, filtro: str = "todos") -> None:
         self.current_screen_function = self.tela_hospedes
         self.current_screen_args = ()
         self.current_screen_kwargs = {'filtro': filtro}
@@ -344,7 +384,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkButton(self.menu_hospede, text="Ver Histórico Financeiro", command=self.preparar_historico, fg_color="transparent", text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"], anchor="w").pack(fill="x")
         ctk.CTkButton(self.menu_hospede, text="Editar Cadastro", command=self.preparar_edicao_hospede, fg_color="transparent", text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"], anchor="w").pack(fill="x")
 
-        def show_menu(event):
+        def show_menu(event: object) -> None:
             selection = self.tree_h.identify_row(event.y)
             if selection:
                 self.tree_h.selection_set(selection)
@@ -355,20 +395,20 @@ class AppHotelLTS(ctk.CTk):
         self.bind("<Button-1>", lambda e: self.menu_hospede.place_forget())
         self.atualizar_lista_hospedes(filtro)
 
-    def agendar_busca(self, filtro):
+    def agendar_busca(self, filtro: str) -> None:
         """Aguarda 500ms após a última tecla antes de buscar (Debounce)"""
         if self.search_job:
             self.after_cancel(self.search_job)
         self.search_job = self.after(500, lambda: self.atualizar_lista_hospedes(filtro))
 
-    def atualizar_lista_hospedes(self, filtro):
+    def atualizar_lista_hospedes(self, filtro: str) -> None:
         self.tree_h.delete(*self.tree_h.get_children())
         for i, h in enumerate(self.core.buscar_filtrado(self.ent_busca.get(), filtro)):
             # Usamos o documento como iid para garantir que o valor exato (string) seja preservado
             tag = 'odd' if i % 2 != 0 else 'even'
             self.tree_h.insert("", "end", iid=h[1], values=(h[0], h[1], f"{h[2]:.2f}"), tags=(tag,))
 
-    def preparar_historico(self, event=None):
+    def preparar_historico(self, event: object | None = None) -> None:
         self.menu_hospede.place_forget()
         sel = self.tree_h.selection()
         if sel:
@@ -376,7 +416,7 @@ class AppHotelLTS(ctk.CTk):
             n = self.tree_h.item(doc)['values'][0]
             self.tela_historico(n, str(doc))
 
-    def preparar_edicao_hospede(self, event=None):
+    def preparar_edicao_hospede(self, event: object | None = None) -> None:
         self.menu_hospede.place_forget()
         sel = self.tree_h.selection()
         if sel:
@@ -386,7 +426,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 5. MÓDULO HISTÓRICO & FINANCEIRO (Detalhes do Cliente)
     # =========================================================================
-    def tela_historico(self, nome, doc):
+    def tela_historico(self, nome: str, doc: str) -> None:
         self.current_screen_function = self.tela_historico
         self.current_screen_args = (nome, doc)
         self.current_screen_kwargs = {}
@@ -396,7 +436,7 @@ class AppHotelLTS(ctk.CTk):
         f_esq = ctk.CTkFrame(self.main_frame, fg_color="transparent"); f_esq.grid(row=0, column=0, sticky="nsew", padx=10)
         top = ctk.CTkFrame(f_esq, fg_color="transparent"); top.pack(fill="x", pady=5)
         ctk.CTkButton(top, text="← Voltar", width=80, command=self.tela_hospedes).pack(side="left")
-        ctk.CTkButton(top, text="💬 WhatsApp", fg_color="#25D366", hover_color="#128C7E", width=100, command=lambda: self.enviar_whatsapp(nome, doc)).pack(side="right", padx=5)
+        ctk.CTkButton(top, text="💬 WhatsApp", fg_color="#25D366", hover_color="#128C7E", width=100, command=lambda: self.enviar_whatsapp(nome, str(doc))).pack(side="right", padx=5)
         ctk.CTkButton(top, text=" Extrato", fg_color="#2c3e50", width=80, command=lambda: self.emitir_extrato(nome, doc)).pack(side="right", padx=5)
         ctk.CTkButton(top, text="📄 Ticket Multas", fg_color="#c0392b", width=80, command=lambda: self.emitir_extrato_multas(nome, doc)).pack(side="right", padx=5)
         ctk.CTkButton(top, text="📄 PDF Voucher", fg_color=self.colors["verde"], width=100, command=lambda: self.emitir_voucher(nome, doc)).pack(side="right", padx=5)
@@ -448,7 +488,7 @@ class AppHotelLTS(ctk.CTk):
         txt.insert("1.0", self.core.get_anotacao(doc))
         ctk.CTkButton(p, text="Salvar Notas", width=100, fg_color=self.colors["dourado"], text_color="white", command=lambda: self.core.salvar_anotacao(doc, txt.get("1.0","end-1c"))).pack(pady=5)
 
-    def enviar_whatsapp(self, nome, doc):
+    def enviar_whatsapp(self, nome: str, doc: str) -> None:
         s, v, b = self.core.get_saldo_info(doc)
         if s <= 0:
             messagebox.showwarning("Aviso", "Cliente sem saldo para enviar.")
@@ -472,7 +512,7 @@ class AppHotelLTS(ctk.CTk):
         link = f"https://web.whatsapp.com/send?phone=55{fone_limpo}&text={quote(msg)}"
         webbrowser.open(link)
 
-    def emitir_voucher(self, nome, doc):
+    def emitir_voucher(self, nome: str, doc: str) -> None:
         """Gera o voucher em uma thread separada para não travar a interface"""
         self.configure(cursor="watch") # Muda cursor para 'carregando'
         def _task():
@@ -486,7 +526,7 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: self.configure(cursor="arrow")) # Restaura cursor
         threading.Thread(target=_task, daemon=True).start()
 
-    def emitir_extrato(self, nome, doc):
+    def emitir_extrato(self, nome: str, doc: str) -> None:
         self.configure(cursor="watch")
         def _task():
             try:
@@ -498,7 +538,7 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: self.configure(cursor="arrow"))
         threading.Thread(target=_task, daemon=True).start()
 
-    def emitir_extrato_multas(self, nome, doc):
+    def emitir_extrato_multas(self, nome: str, doc: str) -> None:
         self.configure(cursor="watch")
         def _task():
             try:
@@ -513,7 +553,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 6. MÓDULO DASHBOARD & RELATÓRIOS
     # =========================================================================
-    def tela_dash(self):
+    def tela_dash(self) -> None:
         # Importação tardia (Lazy Import) para acelerar a abertura do App
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -599,7 +639,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # MÓDULO COMPRAS
     # =========================================================================
-    def tela_compras(self):
+    def tela_compras(self) -> None:
         self.current_screen_function = self.tela_compras
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
@@ -663,7 +703,7 @@ class AppHotelLTS(ctk.CTk):
         fg_list = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
         self.lb_sugestoes = Listbox(self.main_frame, width=40, height=5, bg=bg_list, fg=fg_list, selectbackground=self.colors["verde"], selectforeground="white", borderwidth=1, relief="solid")
         
-        def autocomplete_prod(event):
+        def autocomplete_prod(event: object) -> None:
             if event.keysym in ['Down', 'Up', 'Return', 'Tab']: return
             typed = self.e_prod_compras.get()
             if not typed: self.lb_sugestoes.place_forget(); return
@@ -674,7 +714,7 @@ class AppHotelLTS(ctk.CTk):
                 self.lb_sugestoes.place(in_=self.e_prod_compras, x=0, rely=1.0, relwidth=1.0); self.lb_sugestoes.lift()
             else: self.lb_sugestoes.place_forget()
 
-        def selecionar_sugestao(event=None):
+        def selecionar_sugestao(event: object | None = None) -> None:
             if self.lb_sugestoes.curselection():
                 item = self.lb_sugestoes.get(self.lb_sugestoes.curselection())
                 self.e_prod_compras.delete(0, 'end'); self.e_prod_compras.insert(0, item)
@@ -708,11 +748,9 @@ class AppHotelLTS(ctk.CTk):
         self.configurar_tags_tabela(self.tree_itens)
 
         # Inicialização
-        self.lista_selecionada_id = None
-        self.lista_selecionada_status = None
         self.atualizar_lista_de_listas()
 
-    def atualizar_lista_de_listas(self):
+    def atualizar_lista_de_listas(self) -> None:
         self.tree_listas.delete(*self.tree_listas.get_children())
         listas = self.core.get_listas_resumo()
         for l in listas:
@@ -720,8 +758,9 @@ class AppHotelLTS(ctk.CTk):
             total = l['total_valor'] if l['total_valor'] else 0.0
             self.tree_listas.insert("", "end", values=(l['id'], data_br, l['status'], f"R$ {total:.2f}"))
 
-    def criar_nova_lista(self):
+    def criar_nova_lista(self) -> None:
         try:
+            if not self.current_user: return
             lid = self.core.criar_lista_compras(self.current_user['username'])
             self.atualizar_lista_de_listas()
             # Seleciona a nova lista automaticamente (último item, pois a query ordena DESC, mas treeview insere no fim por padrão, vamos achar pelo ID)
@@ -734,7 +773,7 @@ class AppHotelLTS(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Erro", str(e))
 
-    def carregar_lista_selecionada(self, event):
+    def carregar_lista_selecionada(self, event: object | None) -> None:
         sel = self.tree_listas.selection()
         if not sel: return
         
@@ -757,7 +796,7 @@ class AppHotelLTS(ctk.CTk):
             
         self.atualizar_itens_lista()
 
-    def atualizar_itens_lista(self):
+    def atualizar_itens_lista(self) -> None:
         self.tree_itens.delete(*self.tree_itens.get_children())
         if not self.lista_selecionada_id: return
         
@@ -770,9 +809,10 @@ class AppHotelLTS(ctk.CTk):
             
             self.tree_itens.insert("", "end", values=(i['produto'], i['quantidade'], f"{i['valor_unitario']:.2f}", f"{i['valor_total']:.2f}", seta), tags=(tag_seta,))
 
-    def adicionar_item_lista(self):
+    def adicionar_item_lista(self) -> None:
         if not self.lista_selecionada_id or self.lista_selecionada_status != "ABERTA": return
         
+        if not self.current_user: return
         try:
             raw_prod = self.e_prod_compras.get()
             qtd = self.e_qtd_compras.get()
@@ -811,7 +851,7 @@ class AppHotelLTS(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Erro", str(e))
 
-    def fechar_lista_atual(self):
+    def fechar_lista_atual(self) -> None:
         if not self.lista_selecionada_id: return
         if messagebox.askyesno("Confirmar", "Deseja fechar esta lista? Ela não poderá mais ser editada."):
             self.core.fechar_lista_compras(self.lista_selecionada_id)
@@ -824,7 +864,7 @@ class AppHotelLTS(ctk.CTk):
                     self.carregar_lista_selecionada(None)
                     break
 
-    def imprimir_lista_atual(self):
+    def imprimir_lista_atual(self) -> None:
         if not self.lista_selecionada_id: return
         self.configure(cursor="watch")
         def _task():
@@ -837,7 +877,7 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: self.configure(cursor="arrow"))
         threading.Thread(target=_task, daemon=True).start()
 
-    def exportar_pdf_compras(self):
+    def exportar_pdf_compras(self) -> None:
         self.configure(cursor="watch")
         def _task():
             try:
@@ -852,7 +892,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 7. MÓDULO LANÇAMENTOS (Central)
     # =========================================================================
-    def tela_financeiro(self):
+    def tela_financeiro(self) -> None:
         self.current_screen_function = self.tela_financeiro
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
@@ -861,7 +901,7 @@ class AppHotelLTS(ctk.CTk):
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=10)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
         ctk.CTkLabel(nav, text="CENTRAL FINANCEIRA", font=("Arial", 18, "bold"), text_color=self.colors["verde"]).pack(side="left", padx=20)
-        
+
         def acao_exportar():
             dialog = ctk.CTkInputDialog(text="Digite o Mês/Ano (MM/AAAA) para filtrar\nou deixe vazio para exportar TUDO:", title="Exportar Relatório")
             mes = dialog.get_input()
@@ -912,13 +952,13 @@ class AppHotelLTS(ctk.CTk):
         self.menu_lanc = ctk.CTkFrame(self, width=150, height=50, border_width=1)
         ctk.CTkButton(self.menu_lanc, text="Excluir Lançamento", command=self.excluir_lancamento_selecionado, fg_color="transparent", text_color="red", anchor="w").pack(fill="x")
         
-        def show_menu(event):
+        def show_menu(event: object) -> None:
             selection = self.tree_l.identify_row(event.y)
             if selection:
                 self.tree_l.selection_set(selection)
                 self.menu_lanc.place(x=event.x_root - self.winfo_x(), y=event.y_root - self.winfo_y())
                 self.menu_lanc.lift()
-        
+
         self.tree_l.bind("<Button-3>", show_menu)
         self.bind("<Button-1>", lambda e: self.menu_lanc.place_forget())
 
@@ -941,7 +981,7 @@ class AppHotelLTS(ctk.CTk):
         tree_m.pack(expand=True, fill="both", padx=15, pady=10)
         self.configurar_tags_tabela(tree_m)
 
-        def atualizar_lista_multas():
+        def atualizar_lista_multas() -> None:
             tree_m.delete(*tree_m.get_children())
             filtro = ent_busca_multas.get()
             dados = self.core.get_historico_global(filtro, tipos=('MULTA', 'PAGAMENTO_MULTA'))
@@ -974,7 +1014,7 @@ class AppHotelLTS(ctk.CTk):
         # Duplo clique para ir ao histórico do cliente e pagar
         tv_m.bind("<Double-1>", lambda e: self.tela_historico(tv_m.item(tv_m.selection()[0])['values'][0], str(tv_m.item(tv_m.selection()[0])['values'][1])))
 
-    def atualizar_lista_lancamentos(self):
+    def atualizar_lista_lancamentos(self) -> None:
         self.tree_l.delete(*self.tree_l.get_children())
         filtro = self.ent_busca_lanc.get()
         dados = self.core.get_historico_global(filtro, tipos=('ENTRADA', 'SAIDA'))
@@ -987,9 +1027,9 @@ class AppHotelLTS(ctk.CTk):
             
             self.tree_l.insert("", "end", values=(d['id'], data_br, d['nome'], d['tipo'], f"{d['valor']:.2f}", d['categoria'], d['usuario']), tags=tags)
 
-    def excluir_lancamento_selecionado(self):
+    def excluir_lancamento_selecionado(self) -> None:
         self.menu_lanc.place_forget()
-        if not self.current_user['is_admin']:
+        if not self.current_user or not self.current_user['is_admin']:
             messagebox.showerror("Acesso Negado", "Apenas administradores podem excluir lançamentos.")
             return
         
@@ -1009,14 +1049,14 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 8. MÓDULO CONFIGURAÇÕES & ADMIN
     # =========================================================================
-    def tela_config(self):
+    def tela_config(self) -> None:
         self.current_screen_function = self.tela_config
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
 
         self.limpar_tela()
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=5)
-        ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
+        ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left") # type: ignore
         
         def toggle_theme():
             new_mode = "Dark" if ctk.get_appearance_mode() == "Light" else "Light"
@@ -1044,7 +1084,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkLabel(f_versao, text=f"Versão do Sistema: {self.core.versao_atual}").pack(side="left", padx=10)
         ctk.CTkButton(f_versao, text="Verificar Atualizações", command=self.verificar_update_manual).pack(side="right", padx=10)
 
-    def config_admin_view(self):
+    def config_admin_view(self) -> None:
         # --- Sistema de Abas para melhor organização ---
         tabview = ctk.CTkTabview(self.main_frame, segmented_button_selected_color=self.colors["verde"])
         tabview.pack(fill="both", expand=True, padx=10, pady=5)
@@ -1111,13 +1151,13 @@ class AppHotelLTS(ctk.CTk):
         tv_u.column("U", anchor="center"); tv_u.column("A", anchor="center"); tv_u.column("D", anchor="center")
         tv_u.pack(fill="both", expand=True, padx=10, pady=5)
         self.configurar_tags_tabela(tv_u)
-        
-        def refresh_users():
+
+        def refresh_users() -> None:
             tv_u.delete(*tv_u.get_children())
             for i, u in enumerate(self.core.get_usuarios()):
                 tag = 'odd' if i % 2 != 0 else 'even'
                 tv_u.insert("", "end", values=(u['username'], "Sim" if u['is_admin'] else "Não", "Sim" if u['can_change_dates'] else "Não"), tags=(tag,))
-        
+
         def save_user(event=None):
             if not eu_user.get() or not eu_pass.get(): return
             self.core.salvar_usuario(eu_user.get(), eu_pass.get(), chk_admin.get(), chk_dates.get(), chk_products.get(), self.current_user['username'])
@@ -1127,7 +1167,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkButton(f_form, text="Salvar/Atualizar", command=save_user, fg_color=self.colors["verde"]).pack(side="left", padx=5)
         
         refresh_users()
-        
+
         def del_user():
             sel = tv_u.selection()
             if not sel: return
@@ -1141,7 +1181,7 @@ class AppHotelLTS(ctk.CTk):
             fc_top = ctk.CTkFrame(tab_categorias, fg_color="transparent"); fc_top.pack(fill="x", padx=10, pady=10)
             ec_cat = ctk.CTkEntry(fc_top, placeholder_text="Nova Categoria"); ec_cat.pack(side="left", padx=5, expand=True, fill="x")
             
-            def add_c(event=None):
+            def add_c(event: object | None = None) -> None:
                 self.core.adicionar_categoria(ec_cat.get()); ec_cat.delete(0, 'end'); refresh_c()
             ec_cat.bind("<Return>", add_c)
             ctk.CTkButton(fc_top, text="+", width=40, command=add_c, fg_color=self.colors["verde"]).pack(side="left")
@@ -1150,14 +1190,14 @@ class AppHotelLTS(ctk.CTk):
             tv_c.heading("C", text="Nome"); tv_c.pack(fill="x", padx=10, pady=5)
             self.configurar_tags_tabela(tv_c)
 
-            def refresh_c():
+            def refresh_c() -> None:
                 tv_c.delete(*tv_c.get_children())
                 for i, c in enumerate(self.core.get_categorias()):
                     tag = 'odd' if i % 2 != 0 else 'even'
                     tv_c.insert("", "end", values=(c,), tags=(tag,))
             refresh_c()
 
-            def del_c():
+            def del_c() -> None:
                 if tv_c.selection(): self.core.remover_categoria(tv_c.item(tv_c.selection()[0])['values'][0]); refresh_c()
             ctk.CTkButton(tab_categorias, text="Remover Selecionada", height=25, fg_color=self.colors["vermelho"], command=del_c).pack(pady=5, anchor="e", padx=10)
 
@@ -1166,7 +1206,7 @@ class AppHotelLTS(ctk.CTk):
             fp_top = ctk.CTkFrame(tab_produtos, fg_color="transparent"); fp_top.pack(fill="x", padx=10, pady=10)
             ep_prod = ctk.CTkEntry(fp_top, placeholder_text="Nome do Produto (Ex: Detergente 5L)"); ep_prod.pack(side="left", padx=5, expand=True, fill="x")
             
-            def add_p(event=None):
+            def add_p(event: object | None = None) -> None:
                 self.core.adicionar_produto_predefinido(ep_prod.get()); ep_prod.delete(0, 'end'); refresh_p()
             ep_prod.bind("<Return>", add_p)
             ctk.CTkButton(fp_top, text="+ Adicionar", width=100, command=add_p, fg_color=self.colors["verde"]).pack(side="left")
@@ -1175,14 +1215,14 @@ class AppHotelLTS(ctk.CTk):
             tv_p.heading("P", text="Produto"); tv_p.pack(fill="both", expand=True, padx=10, pady=5)
             self.configurar_tags_tabela(tv_p)
 
-            def refresh_p():
+            def refresh_p() -> None:
                 tv_p.delete(*tv_p.get_children())
                 for i, p in enumerate(self.core.get_produtos_predefinidos()):
                     tag = 'odd' if i % 2 != 0 else 'even'
                     tv_p.insert("", "end", values=(p,), tags=(tag,))
             refresh_p()
 
-            def del_p():
+            def del_p() -> None:
                 if tv_p.selection(): self.core.remover_produto_predefinido(tv_p.item(tv_p.selection()[0])['values'][0]); refresh_p()
             ctk.CTkButton(tab_produtos, text="Remover Selecionado", height=25, fg_color=self.colors["vermelho"], command=del_p).pack(pady=5, anchor="e", padx=10)
 
@@ -1201,14 +1241,14 @@ class AppHotelLTS(ctk.CTk):
                 tag = 'odd' if i % 2 != 0 else 'even'
                 tv_log.insert("", "end", values=(log['data_hora'], log['usuario'], log['acao'], log['detalhes'], log['maquina']), tags=(tag,))
 
-    def config_user_view(self):
+    def config_user_view(self) -> None:
         f = ctk.CTkFrame(self.main_frame, width=400); f.pack(pady=50, ipady=20)
         ctk.CTkLabel(f, text="Alterar Minha Senha", font=("Arial", 16, "bold")).pack(pady=15)
         
         ep = ctk.CTkEntry(f, placeholder_text="Nova Senha", show="*", width=250); ep.pack(pady=10)
         epc = ctk.CTkEntry(f, placeholder_text="Confirmar Nova Senha", show="*", width=250); epc.pack(pady=10)
         
-        def save_pass(event=None):
+        def save_pass(event: object | None = None) -> None:
             p1 = ep.get()
             p2 = epc.get()
             if not p1: return
@@ -1227,7 +1267,7 @@ class AppHotelLTS(ctk.CTk):
     # =========================================================================
     # 9. JANELAS DE DIÁLOGO (POPUPS & TOPLEVELS)
     # =========================================================================
-    def janela_novo_lancamento_central(self):
+    def janela_novo_lancamento_central(self) -> None:
         jan = ctk.CTkToplevel(self); jan.title("Novo Lançamento"); jan.geometry("500x650")
         jan.transient(self); jan.lift(); jan.focus_force()
         jan.after(100, lambda: [jan.grab_set(), jan.focus_force()])
@@ -1243,12 +1283,12 @@ class AppHotelLTS(ctk.CTk):
         tv_res.heading("D", text="Documento"); tv_res.column("D", width=150)
         tv_res.pack(fill="x", padx=10, pady=5)
         
-        def buscar(e=None):
+        def buscar(e: object | None = None) -> None:
             tv_res.delete(*tv_res.get_children())
             for h in self.core.buscar_filtrado(e_busca.get()):
                 tv_res.insert("", "end", values=(h[0], h[1]))
         
-        ctk.CTkButton(f_busca, text="🔍", width=40, command=buscar).pack(side="left")
+        ctk.CTkButton(f_busca, text="🔍", width=40, command=buscar).pack(side="left") # type: ignore
         e_busca.bind("<Return>", buscar)
         
         # Frame de Detalhes
@@ -1259,7 +1299,7 @@ class AppHotelLTS(ctk.CTk):
         
         selected_doc = ctk.StringVar(value="")
         
-        def selecionar_cliente(e):
+        def selecionar_cliente(e: object) -> None:
             sel = tv_res.selection()
             if not sel: return
             vals = tv_res.item(sel[0])['values']
@@ -1273,7 +1313,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkLabel(f_detalhes, text="2. Dados do Lançamento", font=("Arial", 14, "bold")).pack(pady=5)
         
         # Refatoração: Atualização dinâmica dos campos baseada no tipo
-        def atualizar_opcoes_categoria():
+        def atualizar_opcoes_categoria() -> None:
             tipo = tipo_var.get()
             if tipo == "ENTRADA":
                 e_cat.configure(values=self.core.get_categorias())
@@ -1301,7 +1341,8 @@ class AppHotelLTS(ctk.CTk):
         e_cat = ctk.CTkComboBox(f_detalhes, values=self.core.get_categorias()); e_cat.pack(pady=5)
         e_obs = ctk.CTkTextbox(f_detalhes, height=60); e_obs.pack(pady=5, fill="x", padx=20); e_obs.insert("1.0", "Observação...")
         
-        def confirmar(event=None):
+        def confirmar(event: object | None = None) -> None:
+            if not self.current_user: return
             if not selected_doc.get(): messagebox.showwarning("Atenção", "Selecione um cliente primeiro."); return
             t, v, c, o, u = tipo_var.get(), e_valor.get(), e_cat.get(), e_obs.get("1.0", "end-1c"), self.current_user['username']
             try:
@@ -1315,9 +1356,10 @@ class AppHotelLTS(ctk.CTk):
         e_valor.bind("<Return>", confirmar)
         ctk.CTkButton(f_detalhes, text="CONFIRMAR LANÇAMENTO", fg_color=self.colors["verde"], height=40, command=confirmar).pack(pady=10, fill="x", padx=20)
 
-    def janela_calendario_vencimento(self, event, doc, nome):
+    def janela_calendario_vencimento(self, event: object, doc: str, nome: str) -> None:
         # Verificação de permissão melhorada: permite se for admin ou tiver a permissão específica
-        if not self.current_user.get('is_admin') and not self.current_user.get('can_change_dates'):
+        if not self.current_user or \
+           (not self.current_user.get('is_admin') and not self.current_user.get('can_change_dates')):
             messagebox.showerror("Acesso Negado", "Você não tem permissão para alterar datas.")
             return
 
@@ -1338,12 +1380,12 @@ class AppHotelLTS(ctk.CTk):
         jan.after(100, lambda: [jan.grab_set(), jan.focus_force()])
         
         cal = DateEntry(jan, width=12, background='darkblue', date_pattern='dd/mm/yyyy'); cal.pack(pady=20)
-        def ok(): 
+        def ok() -> None:
             self.core.atualizar_data_vencimento_manual(str(doc), cal.get(), val, dt_mov, self.current_user['username'])
             jan.destroy(); self.tela_historico(nome, doc)
         ctk.CTkButton(jan, text="Atualizar Vencimento", command=ok).pack(pady=10)
 
-    def janela_logs(self):
+    def janela_logs(self) -> None:
         jan = ctk.CTkToplevel(self); jan.title("Logs de Auditoria"); jan.geometry("900x500")
         jan.transient(self); jan.lift(); jan.focus_force()
         jan.after(100, lambda: [jan.grab_set(), jan.focus_force()])
@@ -1358,7 +1400,7 @@ class AppHotelLTS(ctk.CTk):
         for log in self.core.get_logs():
             tv.insert("", "end", values=(log['data_hora'], log['usuario'], log['acao'], log['detalhes'], log['maquina']))
 
-    def janela_cadastro_hospede(self, doc_to_edit=None):
+    def janela_cadastro_hospede(self, doc_to_edit: str | None = None) -> None:
         jan = ctk.CTkToplevel(self); jan.geometry("400x400")
         jan.transient(self); jan.lift(); jan.focus_force()
         jan.after(100, lambda: [jan.grab_set(), jan.focus_force()])
@@ -1381,7 +1423,7 @@ class AppHotelLTS(ctk.CTk):
                 etel.insert(0, hospede['telefone'] or "")
                 eemail.insert(0, hospede['email'] or "")
 
-        def salvar(event=None):
+        def salvar(event: object | None = None) -> None:
             user = self.current_user['username'] if self.current_user else "Sistema"
             try:
                 self.core.cadastrar_hospede(en.get(), ed.get(), etel.get(), eemail.get(), usuario_acao=user)
@@ -1397,7 +1439,7 @@ class AppHotelLTS(ctk.CTk):
         eemail.bind("<Return>", salvar)
         ctk.CTkButton(jan, text="Salvar", fg_color=self.colors["verde"], width=300, command=salvar).pack(pady=20)
 
-    def _janela_movimentacao(self, title, doc, nome, tipo_mov, callback):
+    def _janela_movimentacao(self, title: str, doc: str, nome: str, tipo_mov: str, callback: callable) -> None:
         jan = ctk.CTkToplevel(self); jan.title(title); jan.geometry("350x350")
         jan.transient(self); jan.lift(); jan.focus_force()
         jan.after(100, lambda: [jan.grab_set(), jan.focus_force()])
@@ -1414,7 +1456,8 @@ class AppHotelLTS(ctk.CTk):
         
         eo = ctk.CTkTextbox(jan, width=250, height=60); eo.pack(pady=10)
         
-        def salvar(event=None):
+        def salvar(event: object | None = None) -> None:
+            if not self.current_user: return
             user = self.current_user['username']
             try:
                 callback(doc, ev.get(), ec.get(), eo.get("1.0", "end-1c"), user)
@@ -1426,19 +1469,19 @@ class AppHotelLTS(ctk.CTk):
         ev.bind("<Return>", salvar)
         ctk.CTkButton(jan, text="Confirmar", command=salvar, fg_color=self.colors["verde"]).pack(pady=10)
 
-    def janela_add_credito(self, doc, nome):
+    def janela_add_credito(self, doc: str, nome: str) -> None:
         def cb(d, v, c, o, u): self.core.adicionar_movimentacao(d, v, c, "ENTRADA", o, u)
         self._janela_movimentacao("Adicionar Crédito", doc, nome, "ENTRADA", cb)
 
-    def janela_usar_credito(self, doc, nome):
+    def janela_usar_credito(self, doc: str, nome: str) -> None:
         def cb(d, v, c, o, u): self.core.adicionar_movimentacao(d, v, "Uso", "SAIDA", o, u)
         self._janela_movimentacao("Utilizar Crédito", doc, nome, "SAIDA", cb)
 
-    def janela_add_multa(self, doc, nome):
+    def janela_add_multa(self, doc: str, nome: str) -> None:
         def cb(d, v, m, o, u): self.core.adicionar_multa(d, v, m, o, u)
         self._janela_movimentacao("Adicionar Multa", doc, nome, "MULTA", cb)
 
-    def janela_pagar_multa(self, doc, nome):
+    def janela_pagar_multa(self, doc: str, nome: str) -> None:
         def cb(d, v, m, o, u): self.core.pagar_multa(d, v, m, o, u)
         self._janela_movimentacao("Pagar Multa", doc, nome, "PAGAMENTO_MULTA", cb)
 
