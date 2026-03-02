@@ -132,6 +132,7 @@ jobs:
           "
 
       - name: Fazer commit das mudanças de versão
+        id: auto_commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: Bump version to ${{ needs.calculate-version.outputs.new_tag }} [skip ci]"
@@ -147,6 +148,7 @@ jobs:
           tag_name: ${{ needs.calculate-version.outputs.new_tag }}
           name: Release ${{ needs.calculate-version.outputs.new_tag }}
           body: ${{ needs.calculate-version.outputs.changelog }}
+          target_commitish: ${{ steps.auto_commit.outputs.commit_hash }}
           files: |
             artifacts/build-artifact-windows-latest/SistemaHotel.exe
             artifacts/build-artifact-windows-latest/Instalador_SistemaHotel.exe
