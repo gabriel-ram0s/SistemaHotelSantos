@@ -349,8 +349,13 @@ class AppHotelLTS(ctk.CTk):
         self.limpar_tela()
         ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Arial", 28, "bold"), text_color=self.colors["verde"]).pack(pady=60)
         grid = ctk.CTkFrame(self.main_frame, fg_color="transparent"); grid.pack()
-        btns = [("👥 HÓSPEDES", self.tela_hospedes, self.colors["verde"]),
-                ("💰 FINANCEIRO", self.tela_financeiro, self.colors["dourado"]), ("🛒 COMPRAS", self.tela_compras, "#e67e22"), ("⚙️ AJUSTES", self.tela_config, "#7f8c8d")]
+        
+        # Definição de cores (Light, Dark) para melhor contraste e visual no modo escuro
+        btns = [("👥 HÓSPEDES", self.tela_hospedes, (self.colors["verde"], "#059669")),   # Emerald 500 / 600
+                ("💰 FINANCEIRO", self.tela_financeiro, (self.colors["dourado"], "#d97706")), # Amber 500 / 600
+                ("🛒 COMPRAS", self.tela_compras, ("#f97316", "#ea580c")),       # Orange 500 / 600
+                ("⚙️ AJUSTES", self.tela_config, ("#64748b", "#334155"))]        # Slate 500 / 700
+
         for i, (t, c, col) in enumerate(btns):
             ctk.CTkButton(grid, text=t, width=250, height=90, command=c, fg_color=col, font=("Arial", 14, "bold")).grid(row=i//2, column=i%2, padx=20, pady=20)
 
