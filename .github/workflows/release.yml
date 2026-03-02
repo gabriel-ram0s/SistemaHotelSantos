@@ -33,7 +33,7 @@ jobs:
 
   build:
     needs: calculate-version
-    if: needs.calculate-version.outputs.new_version != ''
+    if: needs.calculate-version.outputs.new_tag != ''
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -111,7 +111,7 @@ jobs:
   release:
     needs: [calculate-version, build]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.calculate-version.outputs.new_version != ''
+    if: github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.calculate-version.outputs.new_tag != ''
 
     steps:
       - name: Checkout do Código
