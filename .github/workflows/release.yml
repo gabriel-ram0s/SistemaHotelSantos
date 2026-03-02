@@ -56,6 +56,12 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
+      - name: Instalar dependências do sistema (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
       - name: Instalar Dependências
         run: |
           pip install --upgrade pip
@@ -66,6 +72,7 @@ jobs:
           python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
+        shell: bash
         run: |
           python -c "
           import re, os, sys
@@ -123,6 +130,7 @@ jobs:
           python-version: '3.10'
 
       - name: Atualizar Versão nos Arquivos (Para Commit)
+        shell: bash
         run: |
           python -c "
           import re, os
