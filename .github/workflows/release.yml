@@ -69,10 +69,31 @@ jobs:
           python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
-        # Executa o script dedicado, que é mais robusto que scripts inline
-        run: python .github/scripts/update_versions.py
+        shell: python
         env:
           NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
+        run: |
+          import sys, os, re
+
+          def update_file(file_path, pattern, replacement):
+              if not os.path.exists(file_path):
+                  print(f"Aviso: Arquivo '{file_path}' não encontrado.")
+                  return
+              with open(file_path, 'r', encoding='utf-8') as f: content = f.read()
+              new_content = re.sub(pattern, replacement, content)
+              if new_content != content:
+                  with open(file_path, 'w', encoding='utf-8') as f: f.write(new_content)
+                  print(f"Versão atualizada em '{file_path}'.")
+              else:
+                  print(f"Sem alterações em '{file_path}'.")
+
+          new_version = os.environ.get("NEW_VERSION")
+          if not new_version:
+              print("ERRO: NEW_VERSION não definida.")
+              sys.exit(1)
+
+          update_file('sistemahotelsantos/sistema_clientes.py', r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = "{new_version}"')
+          update_file('setup.iss', r'#define MyAppVersion\s+\"[^\"]*\"', f'#define MyAppVersion "{new_version}"')
 
       - name: Compilar Executável (PyInstaller)
         run: |
@@ -115,10 +136,31 @@ jobs:
           python-version: '3.10'
 
       - name: Atualizar Versão nos Arquivos (Para Commit)
-        # Reutiliza o mesmo script robusto para o commit final
-        run: python .github/scripts/update_versions.py
+        shell: python
         env:
           NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
+        run: |
+          import sys, os, re
+
+          def update_file(file_path, pattern, replacement):
+              if not os.path.exists(file_path):
+                  print(f"Aviso: Arquivo '{file_path}' não encontrado.")
+                  return
+              with open(file_path, 'r', encoding='utf-8') as f: content = f.read()
+              new_content = re.sub(pattern, replacement, content)
+              if new_content != content:
+                  with open(file_path, 'w', encoding='utf-8') as f: f.write(new_content)
+                  print(f"Versão atualizada em '{file_path}'.")
+              else:
+                  print(f"Sem alterações em '{file_path}'.")
+
+          new_version = os.environ.get("NEW_VERSION")
+          if not new_version:
+              print("ERRO: NEW_VERSION não definida.")
+              sys.exit(1)
+
+          update_file('sistemahotelsantos/sistema_clientes.py', r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = "{new_version}"')
+          update_file('setup.iss', r'#define MyAppVersion\s+\"[^\"]*\"', f'#define MyAppVersion "{new_version}"')
 
       - name: Fazer commit das mudanças de versão
         id: auto_commit
