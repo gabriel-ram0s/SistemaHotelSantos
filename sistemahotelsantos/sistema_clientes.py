@@ -34,7 +34,7 @@ class SistemaCreditos:
                 os.makedirs(self.base_dir)
             self.db_name = os.path.join(self.base_dir, db_name)
 
-        self.versao_atual = "4.7.4"  # Versão estável (apenas EXE)
+        self.versao_atual = "4.8.0"  # Versão estável (apenas EXE)
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
