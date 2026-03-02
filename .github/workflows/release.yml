@@ -109,7 +109,7 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    needs: [build] # 'build' já depende de 'calculate-version', então a dependência é transitiva
+    needs: [calculate-version, build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.calculate-version.outputs.new_version != ''
 
