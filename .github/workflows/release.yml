@@ -72,23 +72,8 @@ jobs:
           python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
-        shell: bash
-        run: |
-          python -c "
-          import re, os, sys
-          version = os.environ.get('NEW_VERSION')
-          if not version: sys.exit('ERRO: Variavel de versao nao encontrada.')
-          files = {
-              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = \"{version}\"'),
-              'setup.iss': (r'#define MyAppVersion \"[^\"]*\"', f'#define MyAppVersion \"{version}\"')
-          }
-          for fpath, (pattern, repl) in files.items():
-              if os.path.exists(fpath):
-                  with open(fpath, 'r', encoding='utf-8') as f: content = f.read()
-                  new_content = re.sub(pattern, repl, content)
-                  with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
-                  print(f'Updated {fpath}')
-          "
+        # Executa o script dedicado, que é mais robusto que scripts inline
+        run: python .github/scripts/update_versions.py
         env:
           NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
 
@@ -130,22 +115,8 @@ jobs:
           python-version: '3.10'
 
       - name: Atualizar Versão nos Arquivos (Para Commit)
-        shell: bash
-        run: |
-          python -c "
-          import re, os
-          version = os.environ.get('NEW_VERSION')
-          files = {
-              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = \"{version}\"'),
-              'setup.iss': (r'#define MyAppVersion \"[^\"]*\"', f'#define MyAppVersion \"{version}\"')
-          }
-          for fpath, (pattern, repl) in files.items():
-              if os.path.exists(fpath):
-                  with open(fpath, 'r', encoding='utf-8') as f: content = f.read()
-                  new_content = re.sub(pattern, repl, content)
-                  with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
-                  print(f'Updated {fpath}')
-          "
+        # Reutiliza o mesmo script robusto para o commit final
+        run: python .github/scripts/update_versions.py
         env:
           NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
 
