@@ -66,14 +66,14 @@ jobs:
           python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
-        shell: bash
         run: |
           python -c "
-          import re, os
-          version = '${{ needs.calculate-version.outputs.new_version }}'
+          import re, os, sys
+          version = os.environ.get('NEW_VERSION')
+          if not version: sys.exit('ERRO: Variavel de versao nao encontrada.')
           files = {
-              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]+\"', f'self.versao_atual = \"{version}\"'),
-              'setup.iss': (r'#define MyAppVersion \"[^\"]+\"', f'#define MyAppVersion \"{version}\"')
+              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = \"{version}\"'),
+              'setup.iss': (r'#define MyAppVersion \"[^\"]*\"', f'#define MyAppVersion \"{version}\"')
           }
           for fpath, (pattern, repl) in files.items():
               if os.path.exists(fpath):
@@ -82,6 +82,8 @@ jobs:
                   with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
                   print(f'Updated {fpath}')
           "
+        env:
+          NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
 
       - name: Compilar Executável (PyInstaller)
         run: |
@@ -124,10 +126,10 @@ jobs:
         run: |
           python -c "
           import re, os
-          version = '${{ needs.calculate-version.outputs.new_version }}'
+          version = os.environ.get('NEW_VERSION')
           files = {
-              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]+\"', f'self.versao_atual = \"{version}\"'),
-              'setup.iss': (r'#define MyAppVersion \"[^\"]+\"', f'#define MyAppVersion \"{version}\"')
+              'sistemahotelsantos/sistema_clientes.py': (r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = \"{version}\"'),
+              'setup.iss': (r'#define MyAppVersion \"[^\"]*\"', f'#define MyAppVersion \"{version}\"')
           }
           for fpath, (pattern, repl) in files.items():
               if os.path.exists(fpath):
@@ -136,6 +138,8 @@ jobs:
                   with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
                   print(f'Updated {fpath}')
           "
+        env:
+          NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
 
       - name: Fazer commit das mudanças de versão
         id: auto_commit

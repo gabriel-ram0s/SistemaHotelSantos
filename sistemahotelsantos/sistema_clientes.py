@@ -34,7 +34,7 @@ class SistemaCreditos:
                 os.makedirs(self.base_dir)
             self.db_name = os.path.join(self.base_dir, db_name)
 
-        self.versao_atual = ""  # Versão estável (apenas EXE)
+        self.versao_atual = "0.0.0"  # Placeholder, será substituído pelo CI/CD
         self.empresa = {
             "nome": "HOTEL SANTOS",
             "razao": "Hotel e Restaurante Santos Ana Lucia C. dos Santos",
