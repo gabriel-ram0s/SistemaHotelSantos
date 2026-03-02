@@ -87,9 +87,12 @@ jobs:
 
       - name: Compilar Instalador (Inno Setup)
         if: matrix.os == 'windows-latest' && hashFiles('setup.iss') != ''
+        # Passa o caminho absoluto da pasta 'dist' para o Inno Setup
+        # para evitar qualquer problema com caminhos relativos.
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: setup.iss
+          args: /DSourcePath="${{ github.workspace }}\dist"
 
       - name: Upload dos Artefatos
         uses: actions/upload-artifact@v4

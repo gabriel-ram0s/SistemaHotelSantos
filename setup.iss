@@ -6,8 +6,9 @@
 #define MyAppVersion "4.9.0" 
 #define MyAppPublisher "Gabriel Ramos"
 #define MyAppURL "https://github.com/gabriel-ram0s/sistemahotelsantos"
-#define MyAppExeName "SistemaHotel.exe"
-; #define AppIcon "sistemahotelsantos/app.ico" // Desativado temporariamente para corrigir o build.
+#define MyAppExeName "SistemaHotel.exe" 
+#define AppIcon "sistemahotelsantos/app.ico"
+#define SourcePath "dist" ; Este é o padrão, pode ser sobrescrito pelo workflow
 
 [Setup]
 ; AppId: Identificador único gerado (GUID). 
@@ -36,7 +37,7 @@ OutputDir=Output
 OutputBaseFilename=Instalador_SistemaHotel
 
 ; Ícone do arquivo do instalador.
-; SetupIconFile={#AppIcon}
+SetupIconFile={#AppIcon}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -59,7 +60,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Arquivo principal da aplicação, gerado pelo PyInstaller na pasta 'dist'.
-Source: "dist/{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; Copia o ícone para a pasta de instalação para ser usado nos atalhos e na janela do app.
 ; A linha abaixo é desnecessária, pois o PyInstaller já embute o ícone no .exe principal.
 ; Source: "{#AppIcon}"; DestDir: "{app}"; Flags: ignoreversion
