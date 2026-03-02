@@ -36,14 +36,11 @@ jobs:
     if: needs.calculate-version.outputs.new_tag != ''
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest]
         include:
           - os: windows-latest
             sep: ';'
             exe_name: SistemaHotel.exe
-          - os: ubuntu-latest
-            sep: ':'
-            exe_name: SistemaHotel_Linux
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -144,6 +141,5 @@ jobs:
           files: |
             artifacts/build-artifact-windows-latest/SistemaHotel.exe
             artifacts/build-artifact-windows-latest/Instalador_SistemaHotel.exe
-            artifacts/build-artifact-ubuntu-latest/SistemaHotel_Linux
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
