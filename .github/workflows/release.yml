@@ -33,6 +33,7 @@ jobs:
 
   build:
     needs: calculate-version
+    if: needs.calculate-version.outputs.new_version != ''
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -59,6 +60,10 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow Babel
+
+      - name: Executar Testes Automatizados
+        run: |
+          python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
         run: |
@@ -101,9 +106,9 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    needs: [calculate-version, build]
+    needs: [build] # 'build' já depende de 'calculate-version', então a dependência é transitiva
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.calculate-version.outputs.new_version != ''
 
     steps:
       - name: Checkout do Código
