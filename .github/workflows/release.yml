@@ -66,6 +66,7 @@ jobs:
           python sistemahotelsantos/test_sistema.py
 
       - name: Atualizar Versão nos Arquivos (Para Build)
+        shell: bash
         run: |
           python -c "
           import re, os
