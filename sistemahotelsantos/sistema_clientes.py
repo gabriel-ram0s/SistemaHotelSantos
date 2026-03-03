@@ -1137,20 +1137,35 @@ class SistemaCreditos:
             # 2. Criar script de atualização e executar
             if is_windows:
                 updater_path = os.path.join(exec_dir, "updater.bat")
+                # O script em lote aguardará a saída do processo atual,
+                # substituirá o executável e reiniciará o aplicativo.
+                # Usar um loop com timeout é mais robusto contra problemas de bloqueio de arquivo (Erro 32).
                 bat_script = f"""
                 @echo off
                 echo Atualizando o sistema... Por favor, aguarde.
-                timeout /t 2 /nobreak > NUL
+
+                REM Aguarda o processo pai liberar o arquivo (3 segundos)
+                timeout /t 3 /nobreak > NUL
+
+                REM Tenta deletar o executável antigo em loop
+                :retry
                 del "{exec_path}"
+                if exist "{exec_path}" (
+                    echo Arquivo ainda em uso, tentando novamente em 2 segundos...
+                    timeout /t 2 /nobreak > NUL
+                    goto retry
+                )
+
+                REM Renomeia o novo executável, inicia-o e depois se auto-deleta.
                 ren "{temp_path}" "{exec_name}"
                 start "" "{exec_path}"
                 del "{updater_path}"
                 """
-                with open(updater_path, "w") as bat:
+                with open(updater_path, "w", encoding="utf-8") as bat:
                     bat.write(bat_script)
                 
                 if progress_callback: progress_callback(1.0, "finalizando")
-                subprocess.Popen(updater_path, shell=True, cwd=exec_dir)
+                subprocess.Popen(updater_path, shell=True, cwd=exec_dir, creationflags=subprocess.DETACHED_PROCESS)
             else:
                 # Linux/Unix
                 updater_path = os.path.join(exec_dir, "updater.sh")
