@@ -87,6 +87,9 @@ jobs:
         run: |
           pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
 
+      - name: Preparar Ícone para o Instalador
+        run: copy sistemahotelsantos\app.ico app.ico
+
       - name: Compilar Instalador (Inno Setup)
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:

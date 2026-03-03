@@ -7,7 +7,7 @@
 #define MyAppPublisher "Gabriel Ramos"
 #define MyAppURL "https://github.com/gabriel-ram0s/sistemahotelsantos"
 #define MyAppExeName "SistemaHotel.exe" 
-#define AppIcon "sistemahotelsantos/app.ico"
+#define AppIcon "app.ico"
 #define SourcePath "dist" ; Este é o padrão, pode ser sobrescrito pelo workflow
 
 [Setup]
