@@ -110,7 +110,6 @@ jobs:
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: setup.iss
-          args: /DSourcePath="${{ github.workspace }}\dist"
 
       - name: Upload dos Artefatos
         uses: actions/upload-artifact@v4
