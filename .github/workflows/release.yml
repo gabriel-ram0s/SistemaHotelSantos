@@ -1,4 +1,4 @@
-name: Release Automática
+name: Criar Release para Windows
 
 on:
   push:
@@ -13,6 +13,7 @@ permissions:
   contents: write
 
 jobs:
+  # Job 1: Calcular a versão (precisa rodar em Linux por causa da Action de tag)
   calculate-version:
     runs-on: ubuntu-latest
     outputs:
@@ -23,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
       - name: Calcular Próxima Versão
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
@@ -31,21 +33,15 @@ jobs:
           default_bump: patch
           dry_run: true
 
-  build:
+  # Job 2: Compilar e Lançar (Roda em Windows)
+  build-release:
     needs: calculate-version
     if: needs.calculate-version.outputs.new_tag != ''
-    strategy:
-      matrix:
-        os: [windows-latest]
-        include:
-          - os: windows-latest
-            sep: ';'
-            exe_name: SistemaHotel.exe
-    runs-on: ${{ matrix.os }}
-
+    runs-on: windows-latest
     steps:
-      - name: Checkout do Código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Importante para o commit funcionar corretamente
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -53,28 +49,20 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Instalar dependências do sistema (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk
-
-      - name: Instalar Dependências
+      - name: Instalar Dependências Python
         run: |
           pip install --upgrade pip
           pip install pyinstaller customtkinter tkcalendar matplotlib requests fpdf2 Pillow Babel
 
       - name: Executar Testes Automatizados
-        run: |
-          python sistemahotelsantos/test_sistema.py
+        run: python sistemahotelsantos/test_sistema.py
 
-      - name: Atualizar Versão nos Arquivos (Para Build)
+      - name: Atualizar Versão nos Arquivos
         shell: python
         env:
           NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
         run: |
           import sys, os, re
-
           def update_file(file_path, pattern, replacement):
               if not os.path.exists(file_path):
                   print(f"Aviso: Arquivo '{file_path}' não encontrado.")
@@ -86,91 +74,29 @@ jobs:
                   print(f"Versão atualizada em '{file_path}'.")
               else:
                   print(f"Sem alterações em '{file_path}'.")
-
+          
           new_version = os.environ.get("NEW_VERSION")
           if not new_version:
               print("ERRO: NEW_VERSION não definida.")
               sys.exit(1)
-
+          
           update_file('sistemahotelsantos/sistema_clientes.py', r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = "{new_version}"')
           update_file('setup.iss', r'#define MyAppVersion\s+\"[^\"]*\"', f'#define MyAppVersion "{new_version}"')
 
       - name: Compilar Executável (PyInstaller)
         run: |
-          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico${{ matrix.sep }}." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
-
-      - name: Renomear Executável Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: mv dist/SistemaHotel dist/SistemaHotel_Linux
+          pyinstaller --clean --noconsole --onefile --name "SistemaHotel" --icon="sistemahotelsantos/app.ico" --add-data="sistemahotelsantos/app.ico;." --collect-all customtkinter --hidden-import babel.numbers --hidden-import matplotlib.pyplot --hidden-import matplotlib.backends.backend_tkagg --hidden-import tkcalendar --hidden-import requests --hidden-import fpdf --hidden-import fontTools.cu2qu --distpath ./dist --workpath ./build_temp sistemahotelsantos/app_gui.py
 
       - name: Compilar Instalador (Inno Setup)
-        if: matrix.os == 'windows-latest' && hashFiles('setup.iss') != ''
-        # Passa o caminho absoluto da pasta 'dist' para o Inno Setup
-        # para evitar qualquer problema com caminhos relativos.
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: setup.iss
-
-      - name: Upload dos Artefatos
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifact-${{ matrix.os }}
-          path: |
-            dist/${{ matrix.exe_name }}
-            Output/Instalador_SistemaHotel.exe
-          if-no-files-found: ignore
-
-  release:
-    needs: [calculate-version, build]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.calculate-version.outputs.new_tag != ''
-
-    steps:
-      - name: Checkout do Código
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Atualizar Versão nos Arquivos (Para Commit)
-        shell: python
-        env:
-          NEW_VERSION: ${{ needs.calculate-version.outputs.new_version }}
-        run: |
-          import sys, os, re
-
-          def update_file(file_path, pattern, replacement):
-              if not os.path.exists(file_path):
-                  print(f"Aviso: Arquivo '{file_path}' não encontrado.")
-                  return
-              with open(file_path, 'r', encoding='utf-8') as f: content = f.read()
-              new_content = re.sub(pattern, replacement, content)
-              if new_content != content:
-                  with open(file_path, 'w', encoding='utf-8') as f: f.write(new_content)
-                  print(f"Versão atualizada em '{file_path}'.")
-              else:
-                  print(f"Sem alterações em '{file_path}'.")
-
-          new_version = os.environ.get("NEW_VERSION")
-          if not new_version:
-              print("ERRO: NEW_VERSION não definida.")
-              sys.exit(1)
-
-          update_file('sistemahotelsantos/sistema_clientes.py', r'self.versao_atual\s*=\s*\"[^\"]*\"', f'self.versao_atual = "{new_version}"')
-          update_file('setup.iss', r'#define MyAppVersion\s+\"[^\"]*\"', f'#define MyAppVersion "{new_version}"')
 
       - name: Fazer commit das mudanças de versão
         id: auto_commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Bump version to ${{ needs.calculate-version.outputs.new_tag }} [skip ci]"
-
-      - name: Download dos Artefatos
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
+          commit_message: "chore(release): Bump version to ${{ needs.calculate-version.outputs.new_tag }} [skip ci]"
 
       - name: Criar Release no GitHub
         uses: softprops/action-gh-release@v2
@@ -180,7 +106,7 @@ jobs:
           body: ${{ needs.calculate-version.outputs.changelog }}
           target_commitish: ${{ steps.auto_commit.outputs.commit_hash }}
           files: |
-            artifacts/build-artifact-windows-latest/SistemaHotel.exe
-            artifacts/build-artifact-windows-latest/Instalador_SistemaHotel.exe
+            dist/SistemaHotel.exe
+            Output/Instalador_SistemaHotel.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
