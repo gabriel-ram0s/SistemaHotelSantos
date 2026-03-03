@@ -10,6 +10,11 @@ from urllib.parse import quote
 import threading
 import traceback
 
+try:
+    from tkcalendar import Calendar
+except ImportError:
+    Calendar = None
+
 def resource_path(relative_path: str) -> str:
     """ Obtém o caminho absoluto para recursos, funcionando para dev e PyInstaller """
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -63,6 +68,13 @@ class AppHotelLTS(ctk.CTk):
         self.tree_itens: ttk.Treeview
         self.lista_selecionada_id: int | None = None
         self.lista_selecionada_status: str | None = None
+
+        # Widgets da tela de Calendário
+        self.calendario: Calendar | None = None
+        self.combo_funcionarios: ctk.CTkComboBox | None = None
+        self.tree_funcionarios: ttk.Treeview | None = None
+        self.lbl_data_selecionada: ctk.CTkLabel | None = None
+        self.funcionarios_cache: list[dict] = []
         # --- Fim da Declaração ---
 
         # Carrega o core e o tema PREVIAMENTE para evitar conflito de cores (Treeview vs CTk)
@@ -113,6 +125,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="👥 Hóspedes", command=self.tela_hospedes, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text="💰 Financeiro", command=self.tela_financeiro, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text="🛒 Compras", command=self.tela_compras, **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="📅 Calendário", command=self.tela_calendario, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text=" Dashboard", command=self.tela_dash, **btn_opts).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(self.sidebar, text="⚙️ Ajustes", command=self.tela_config, **btn_opts).pack(pady=5, fill="x", padx=10)
         
@@ -353,7 +366,7 @@ class AppHotelLTS(ctk.CTk):
         # Definição de cores (Light, Dark) para melhor contraste e visual no modo escuro
         btns = [("👥 HÓSPEDES", self.tela_hospedes, (self.colors["verde"], "#059669")),   # Emerald 500 / 600
                 ("💰 FINANCEIRO", self.tela_financeiro, (self.colors["dourado"], "#d97706")), # Amber 500 / 600
-                ("🛒 COMPRAS", self.tela_compras, ("#f97316", "#ea580c")),       # Orange 500 / 600
+                ("🛒 COMPRAS", self.tela_compras, ("#0af364", "#ea580c")),       # Orange 500 / 600
                 ("⚙️ AJUSTES", self.tela_config, ("#64748b", "#334155"))]        # Slate 500 / 700
 
         for i, (t, c, col) in enumerate(btns):
@@ -893,6 +906,207 @@ class AppHotelLTS(ctk.CTk):
             finally:
                 self.after(0, lambda: self.configure(cursor="arrow"))
         threading.Thread(target=_task, daemon=True).start()
+
+    # =========================================================================
+    # MÓDULO CALENDÁRIO
+    # =========================================================================
+    def tela_calendario(self) -> None:
+        if not Calendar:
+            messagebox.showerror("Erro de Dependência", "A biblioteca 'tkcalendar' é necessária para este módulo.\n\nInstale com: pip install tkcalendar")
+            return
+
+        self.current_screen_function = self.tela_calendario
+        self.current_screen_args = ()
+        self.current_screen_kwargs = {}
+        self.limpar_tela()
+
+        # Navegação
+        nav = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        nav.pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
+        ctk.CTkLabel(nav, text="CALENDÁRIO DE FUNCIONÁRIOS", font=("Arial", 18, "bold"), text_color="#3498db").pack(side="left", padx=20)
+
+        # Layout principal
+        main_paned = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        main_paned.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # --- PAINEL ESQUERDO (Gerenciamento) ---
+        left_frame = ctk.CTkFrame(main_paned, width=350)
+        left_frame.pack(side="left", fill="y", padx=(0, 10))
+        left_frame.pack_propagate(False)
+
+        # --- PAINEL DIREITO (Calendário) ---
+        right_frame = ctk.CTkFrame(main_paned)
+        right_frame.pack(side="right", fill="both", expand=True)
+
+        # --- Conteúdo do Painel Esquerdo ---
+        ctk.CTkLabel(left_frame, text="Agendar na Data Selecionada", font=("Arial", 14, "bold")).pack(pady=(10, 5))
+        
+        self.lbl_data_selecionada = ctk.CTkLabel(left_frame, text="Selecione uma data no calendário", text_color="gray")
+        self.lbl_data_selecionada.pack(pady=5)
+
+        self.combo_funcionarios = ctk.CTkComboBox(left_frame, width=250, values=["Nenhum"])
+        self.combo_funcionarios.pack(pady=5)
+
+        btn_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        btn_frame.pack(pady=10)
+        ctk.CTkButton(btn_frame, text="Agendar", fg_color=self.colors["verde"], command=self.agendar_funcionario_selecionado).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Remover", fg_color=self.colors["vermelho"], command=self.remover_agendamento_selecionado).pack(side="left", padx=5)
+
+        # Separador
+        ctk.CTkFrame(left_frame, height=2, border_width=0, fg_color="gray").pack(fill="x", padx=10, pady=15)
+
+        # Gerenciamento de Funcionários
+        ctk.CTkLabel(left_frame, text="Gerenciar Funcionários", font=("Arial", 14, "bold")).pack(pady=5)
+        
+        add_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        add_frame.pack(fill="x", padx=10, pady=5)
+        e_novo_func = ctk.CTkEntry(add_frame, placeholder_text="Nome do novo funcionário")
+        e_novo_func.pack(side="left", fill="x", expand=True)
+        
+        def adicionar_func_action():
+            nome = e_novo_func.get()
+            if nome and self.current_user:
+                try:
+                    self.core.adicionar_funcionario(nome, self.current_user['username'])
+                    e_novo_func.delete(0, 'end')
+                    self.refresh_lista_funcionarios()
+                except Exception as e:
+                    messagebox.showerror("Erro", str(e))
+        
+        e_novo_func.bind("<Return>", lambda e: adicionar_func_action())
+        ctk.CTkButton(add_frame, text="+", width=30, command=adicionar_func_action).pack(side="left", padx=5)
+
+        self.tree_funcionarios = ttk.Treeview(left_frame, columns=("ID", "Nome"), show="headings", height=5)
+        self.tree_funcionarios.heading("ID", text="#"); self.tree_funcionarios.column("ID", width=40, anchor="center")
+        self.tree_funcionarios.heading("Nome", text="Nome"); self.tree_funcionarios.column("Nome", width=200)
+        self.tree_funcionarios.pack(fill="x", expand=True, padx=10, pady=5)
+        
+        def remover_func_action():
+            if not self.tree_funcionarios or not self.current_user: return
+            sel = self.tree_funcionarios.selection()
+            if not sel: return
+            
+            item = self.tree_funcionarios.item(sel[0])
+            func_id, nome = item['values']
+            
+            if messagebox.askyesno("Confirmar", f"Deseja remover o funcionário '{nome}'?\nTodos os seus agendamentos também serão removidos."):
+                try:
+                    self.core.remover_funcionario(func_id, self.current_user['username'])
+                    self.refresh_lista_funcionarios()
+                    self.refresh_eventos_calendario() # Refresh calendar as schedules were removed
+                except Exception as e:
+                    messagebox.showerror("Erro", str(e))
+
+        ctk.CTkButton(left_frame, text="Remover Funcionário Selecionado", fg_color=self.colors["vermelho"], command=remover_func_action).pack(pady=10)
+
+        # --- Conteúdo do Painel Direito ---
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        cal_bg = "#1f2937" if is_dark else "#ffffff"
+        cal_fg = "#f3f4f6" if is_dark else "#1f2937"
+        cal_sel_bg = self.colors["verde"]
+        
+        self.calendario = Calendar(right_frame, selectmode='day', date_pattern='dd/mm/yyyy',
+                                   background=cal_bg, foreground=cal_fg,
+                                   headersbackground=cal_bg, headersforeground=cal_fg,
+                                   normalbackground=cal_bg, normalforeground=cal_fg,
+                                   weekendbackground=cal_bg, weekendforeground=cal_fg,
+                                   othermonthbackground="#374151" if is_dark else "#e5e7eb",
+                                   othermonthwebackground="#374151" if is_dark else "#e5e7eb",
+                                   selectbackground=cal_sel_bg,
+                                   font=("Arial", 12),
+                                   locale='pt_BR')
+        self.calendario.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        self.calendario.bind("<<CalendarSelected>>", self.atualizar_data_selecionada_calendario)
+        self.calendario.bind("<<CalendarMonthChanged>>", lambda e: self.refresh_eventos_calendario())
+
+        # Inicialização
+        self.refresh_lista_funcionarios()
+        self.refresh_eventos_calendario()
+        self.atualizar_data_selecionada_calendario(None) # Seta a data inicial
+
+    def refresh_lista_funcionarios(self):
+        if not self.tree_funcionarios or not self.combo_funcionarios: return
+        
+        # Limpa
+        self.tree_funcionarios.delete(*self.tree_funcionarios.get_children())
+        
+        # Busca
+        self.funcionarios_cache = [dict(f) for f in self.core.get_funcionarios()]
+        nomes_funcionarios = [f['nome'] for f in self.funcionarios_cache]
+        
+        # Popula
+        for f in self.funcionarios_cache:
+            self.tree_funcionarios.insert("", "end", values=(f['id'], f['nome']))
+        
+        self.combo_funcionarios.configure(values=["Nenhum"] + nomes_funcionarios)
+        self.combo_funcionarios.set("Nenhum")
+
+    def refresh_eventos_calendario(self):
+        if not self.calendario: return
+        
+        # Limpa eventos antigos
+        self.calendario.calevent_remove('all')
+        
+        # Busca novos eventos
+        cal_date = self.calendario.get_date() # '2/3/2026'
+        dt_obj = datetime.strptime(cal_date, '%d/%m/%Y')
+        
+        eventos = self.core.get_agenda_mes(dt_obj.year, dt_obj.month)
+        
+        for data_iso, nome_func in eventos.items():
+            event_dt = datetime.strptime(data_iso, '%Y-%m-%d')
+            self.calendario.calevent_create(event_dt, nome_func, 'func_agenda')
+            
+        self.calendario.tag_config('func_agenda', background=self.colors["verde"], foreground='white')
+
+    def atualizar_data_selecionada_calendario(self, event):
+        if not self.calendario or not self.lbl_data_selecionada: return
+        
+        data_selecionada = self.calendario.get_date()
+        self.lbl_data_selecionada.configure(text=f"Data: {data_selecionada}")
+
+    def agendar_funcionario_selecionado(self):
+        if not self.calendario or not self.combo_funcionarios or not self.current_user: return
+        
+        nome_func = self.combo_funcionarios.get()
+        if nome_func == "Nenhum":
+            messagebox.showwarning("Aviso", "Selecione um funcionário para agendar.")
+            return
+            
+        # Encontra o ID do funcionário
+        func_id = None
+        for f in self.funcionarios_cache:
+            if f['nome'] == nome_func:
+                func_id = f['id']
+                break
+        
+        if func_id is None:
+            messagebox.showerror("Erro", "Funcionário não encontrado no cache.")
+            return
+            
+        data_str = self.calendario.get_date()
+        data_iso = datetime.strptime(data_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+        
+        try:
+            self.core.salvar_agendamento(data_iso, func_id, self.current_user['username'])
+            self.refresh_eventos_calendario()
+        except Exception as e:
+            messagebox.showerror("Erro ao Agendar", str(e))
+
+    def remover_agendamento_selecionado(self):
+        if not self.calendario or not self.current_user: return
+        
+        data_str = self.calendario.get_date()
+        data_iso = datetime.strptime(data_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+        
+        if messagebox.askyesno("Confirmar", f"Deseja remover o agendamento do dia {data_str}?"):
+            try:
+                self.core.remover_agendamento(data_iso, self.current_user['username'])
+                self.refresh_eventos_calendario()
+            except Exception as e:
+                messagebox.showerror("Erro ao Remover", str(e))
 
     # =========================================================================
     # 7. MÓDULO LANÇAMENTOS (Central)

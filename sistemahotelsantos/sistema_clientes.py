@@ -83,6 +83,13 @@ class SistemaCreditos:
                                     usuario TEXT,
                                     obs TEXT)''')
             self.cursor.execute('CREATE TABLE IF NOT EXISTS produtos (nome TEXT PRIMARY KEY)')
+            self.cursor.execute('CREATE TABLE IF NOT EXISTS funcionarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT UNIQUE NOT NULL)')
+            self.cursor.execute('''CREATE TABLE IF NOT EXISTS agenda (
+                                    data TEXT PRIMARY KEY, 
+                                    funcionario_id INTEGER, 
+                                    obs TEXT, 
+                                    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)
+                                )''')
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('validade_meses', 6))
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('alerta_dias', 30))
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('tema', 0)) # 0=Light, 1=Dark
@@ -91,6 +98,7 @@ class SistemaCreditos:
             self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_historico_doc ON historico_zebra(documento)")
             self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_compras_prod ON compras(produto)")
             self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_nome ON produtos(nome)")
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_agenda_data ON agenda(data)")
             
             # MIGRATION: Adiciona coluna usuario se não existir (para bases antigas)
             try:
@@ -848,6 +856,50 @@ class SistemaCreditos:
         try: pdf.output(fname)
         except PermissionError: raise Exception(f"Feche o arquivo '{fname}' antes de gerar um novo.")
         return fname
+
+    # =========================================================================
+    # MÓDULO CALENDÁRIO
+    # =========================================================================
+    def get_funcionarios(self) -> List[sqlite3.Row]:
+        self.cursor.execute("SELECT * FROM funcionarios ORDER BY nome")
+        return self.cursor.fetchall()
+
+    def adicionar_funcionario(self, nome: str, usuario_acao: str = "Sistema") -> None:
+        if not nome or not nome.strip():
+            raise Exception("O nome do funcionário não pode ser vazio.")
+        with self.conn:
+            self.cursor.execute("INSERT OR IGNORE INTO funcionarios (nome) VALUES (?)", (nome.strip().upper(),))
+        self.registrar_log(usuario_acao, "ADD_FUNCIONARIO", f"Nome: {nome.strip().upper()}")
+
+    def remover_funcionario(self, funcionario_id: int, usuario_acao: str = "Sistema") -> None:
+        with self.conn:
+            # Primeiro remove os agendamentos para não violar a FK
+            self.cursor.execute("DELETE FROM agenda WHERE funcionario_id = ?", (funcionario_id,))
+            # Depois remove o funcionário
+            self.cursor.execute("DELETE FROM funcionarios WHERE id = ?", (funcionario_id,))
+        self.registrar_log(usuario_acao, "DEL_FUNCIONARIO", f"ID: {funcionario_id}")
+
+    def get_agenda_mes(self, ano: int, mes: int) -> Dict[str, str]:
+        """Retorna um dicionário de {data_iso: nome_funcionario} para o mês/ano."""
+        like_str = f"{ano}-{mes:02d}-%"
+        query = """
+            SELECT a.data, f.nome 
+            FROM agenda a
+            JOIN funcionarios f ON a.funcionario_id = f.id
+            WHERE a.data LIKE ?
+        """
+        self.cursor.execute(query, (like_str,))
+        return {row['data']: row['nome'] for row in self.cursor.fetchall()}
+
+    def salvar_agendamento(self, data_iso: str, funcionario_id: int, usuario_acao: str = "Sistema") -> None:
+        with self.conn:
+            self.cursor.execute("INSERT OR REPLACE INTO agenda (data, funcionario_id) VALUES (?, ?)", (data_iso, funcionario_id))
+        self.registrar_log(usuario_acao, "SAVE_AGENDAMENTO", f"Data: {data_iso}, FuncID: {funcionario_id}")
+
+    def remover_agendamento(self, data_iso: str, usuario_acao: str = "Sistema") -> None:
+        with self.conn:
+            self.cursor.execute("DELETE FROM agenda WHERE data = ?", (data_iso,))
+        self.registrar_log(usuario_acao, "DEL_AGENDAMENTO", f"Data: {data_iso}")
 
     def get_dados_dash(self) -> Tuple[float, float, float, int]:
         self.cursor.execute("SELECT documento FROM hospedes")
