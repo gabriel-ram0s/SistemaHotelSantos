@@ -891,10 +891,21 @@ class SistemaCreditos:
         self.cursor.execute(query, (like_str,))
         return {row['data']: row['nome'] for row in self.cursor.fetchall()}
 
-    def salvar_agendamento(self, data_iso: str, funcionario_id: int, usuario_acao: str = "Sistema") -> None:
+    def get_agendamento_dia(self, data_iso: str) -> Optional[Dict[str, Any]]:
+        query = """
+            SELECT a.data, a.funcionario_id, a.obs, f.nome 
+            FROM agenda a
+            JOIN funcionarios f ON a.funcionario_id = f.id
+            WHERE a.data = ?
+        """
+        self.cursor.execute(query, (data_iso,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def salvar_agendamento(self, data_iso: str, funcionario_id: int, obs: str = "", usuario_acao: str = "Sistema") -> None:
         with self.conn:
-            self.cursor.execute("INSERT OR REPLACE INTO agenda (data, funcionario_id) VALUES (?, ?)", (data_iso, funcionario_id))
-        self.registrar_log(usuario_acao, "SAVE_AGENDAMENTO", f"Data: {data_iso}, FuncID: {funcionario_id}")
+            self.cursor.execute("INSERT OR REPLACE INTO agenda (data, funcionario_id, obs) VALUES (?, ?, ?)", (data_iso, funcionario_id, obs))
+        self.registrar_log(usuario_acao, "SAVE_AGENDAMENTO", f"Data: {data_iso}, FuncID: {funcionario_id}, Obs: {obs}")
 
     def remover_agendamento(self, data_iso: str, usuario_acao: str = "Sistema") -> None:
         with self.conn:

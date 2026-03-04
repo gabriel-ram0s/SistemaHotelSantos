@@ -72,6 +72,7 @@ class AppHotelLTS(ctk.CTk):
         # Widgets da tela de Calendário
         self.calendario: Calendar | None = None
         self.combo_funcionarios: ctk.CTkComboBox | None = None
+        self.e_obs_agenda: ctk.CTkEntry | None = None
         self.tree_funcionarios: ttk.Treeview | None = None
         self.lbl_data_selecionada: ctk.CTkLabel | None = None
         self.funcionarios_cache: list[dict] = []
@@ -948,6 +949,9 @@ class AppHotelLTS(ctk.CTk):
         self.combo_funcionarios = ctk.CTkComboBox(left_frame, width=250, values=["Nenhum"])
         self.combo_funcionarios.pack(pady=5)
 
+        self.e_obs_agenda = ctk.CTkEntry(left_frame, width=250, placeholder_text="Observação (Turno, Tarefa...)")
+        self.e_obs_agenda.pack(pady=5)
+
         btn_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
         btn_frame.pack(pady=10)
         ctk.CTkButton(btn_frame, text="Agendar", fg_color=self.colors["verde"], command=self.agendar_funcionario_selecionado).pack(side="left", padx=5)
@@ -1063,12 +1067,27 @@ class AppHotelLTS(ctk.CTk):
 
     def atualizar_data_selecionada_calendario(self, event):
         if not self.calendario or not self.lbl_data_selecionada: return
-        
         data_selecionada = self.calendario.get_date()
         self.lbl_data_selecionada.configure(text=f"Data: {data_selecionada}")
+        
+        # Busca agendamento existente para preencher os campos
+        try:
+            data_iso = datetime.strptime(data_selecionada, '%d/%m/%Y').strftime('%Y-%m-%d')
+            agendamento = self.core.get_agendamento_dia(data_iso)
+            
+            if agendamento:
+                self.combo_funcionarios.set(agendamento['nome'])
+                self.e_obs_agenda.delete(0, 'end')
+                if agendamento['obs']:
+                    self.e_obs_agenda.insert(0, agendamento['obs'])
+            else:
+                self.combo_funcionarios.set("Nenhum")
+                self.e_obs_agenda.delete(0, 'end')
+        except Exception as e:
+            print(f"Erro ao buscar agendamento: {e}")
 
     def agendar_funcionario_selecionado(self):
-        if not self.calendario or not self.combo_funcionarios or not self.current_user: return
+        if not self.calendario or not self.combo_funcionarios or not self.e_obs_agenda or not self.current_user: return
         
         nome_func = self.combo_funcionarios.get()
         if nome_func == "Nenhum":
@@ -1088,9 +1107,10 @@ class AppHotelLTS(ctk.CTk):
             
         data_str = self.calendario.get_date()
         data_iso = datetime.strptime(data_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+        obs = self.e_obs_agenda.get()
         
         try:
-            self.core.salvar_agendamento(data_iso, func_id, self.current_user['username'])
+            self.core.salvar_agendamento(data_iso, func_id, obs, self.current_user['username'])
             self.refresh_eventos_calendario()
         except Exception as e:
             messagebox.showerror("Erro ao Agendar", str(e))
@@ -1105,6 +1125,8 @@ class AppHotelLTS(ctk.CTk):
             try:
                 self.core.remover_agendamento(data_iso, self.current_user['username'])
                 self.refresh_eventos_calendario()
+                self.combo_funcionarios.set("Nenhum")
+                self.e_obs_agenda.delete(0, 'end')
             except Exception as e:
                 messagebox.showerror("Erro ao Remover", str(e))
 
