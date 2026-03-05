@@ -1,7 +1,0 @@
-pyinstaller
-customtkinter
-tkcalendar
-matplotlib
-requests
-fpdf2
-Pillow
