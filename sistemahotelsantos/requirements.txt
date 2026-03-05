@@ -1,0 +1,18 @@
+# Interface Gráfica
+customtkinter==5.2.0
+tkcalendar==1.6.1
+
+# PDF
+fpdf2==2.7.0
+
+# Requisições HTTP
+requests==2.31.0
+
+# Testes
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Linting e Code Quality
+flake8==6.1.0
+black==23.12.1
+mypy==1.7.1

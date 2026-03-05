@@ -1,0 +1,90 @@
+# =========================================================================
+# .gitignore
+# Arquivo de configuração do Git para ignorar pastas e arquivos desnecessários
+# =========================================================================
+
+# Ambiente Virtual
+venv/
+env/
+ENV/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+logs/
+*.log
+
+# Banco de Dados
+*.db
+*.sqlite
+*.sqlite3
+hotel.db
+
+# Arquivos Temporários
+*.tmp
+*.bak
+*.swp
+*~
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Pycharm
+.idea/
+*.iml
+
+# My SQL
+*.sql
+
+# Variáveis de Ambiente
+.env
+.env.local
+.env.*.local
+
+# IDE específica
+.vscode/
+.idea/
+
+# Arquivos do projeto que mudam
+config.local.json
+secrets.json

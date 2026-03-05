@@ -1,4 +1,4 @@
-#!/home/gabriel/SistemaHotel/hotel_gestao/.venv/bin/python3.12
+#!/home/gabriel/SistemaHotelSantos/sistemahotelsantos/.venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

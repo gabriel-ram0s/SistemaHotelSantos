@@ -1,0 +1,23 @@
+2026-03-05 13:55:08 - __main__ - INFO - Inicializando SistemaCreditos com BD: :memory:
+2026-03-05 13:55:08 - __main__ - INFO - ✅ Conexão com BD estabelecida: :memory:
+2026-03-05 13:55:08 - __main__ - INFO - Criando tabelas do BD...
+2026-03-05 13:55:08 - __main__ - INFO - ✅ 4 categorias padrão inseridas
+2026-03-05 13:55:08 - __main__ - INFO - ✅ Tabelas criadas/verificadas com sucesso
+2026-03-05 13:55:08 - __main__ - INFO - ✅ Hóspede cadastrado: João Silva (123.456.789-00)
+2026-03-05 13:55:08 - __main__ - INFO - ✅ Movimentação adicionada: ENTRADA de R$ 100.00 para 123.456.789-00
+2026-03-05 13:55:08 - __main__ - INFO - ✅ BD fechado corretamente
+2026-03-05 16:01:11 - __main__ - INFO - Inicializando AppHotelLTS...
+2026-03-05 16:01:11 - __main__ - INFO - ✅ Core inicializado com sucesso
+2026-03-05 16:01:12 - __main__ - INFO - ✅ AppHotelLTS inicializada com sucesso
+2026-03-05 16:01:18 - __main__ - INFO - Login tentativo: gabriel
+2026-03-05 16:01:24 - __main__ - INFO - Abrindo tela de hóspedes
+2026-03-05 16:01:29 - __main__ - INFO - Abrindo tela de hóspedes
+2026-03-05 16:01:33 - __main__ - INFO - Encerrando aplicação...
+2026-03-05 16:08:46 - __main__ - INFO - Encerrando aplicação...
+2026-03-05 16:08:50 - __main__ - INFO - Encerrando aplicação...
+2026-03-05 16:12:32 - __main__ - INFO - Inicializando AppHotelLTS...
+2026-03-05 16:12:32 - __main__ - INFO - ✅ Core inicializado com sucesso
+2026-03-05 16:12:32 - __main__ - INFO - ✅ AppHotelLTS inicializada com sucesso
+2026-03-05 16:12:36 - __main__ - INFO - Login tentativo: gabriel
+2026-03-05 16:12:38 - __main__ - INFO - Abrindo tela de hóspedes
+2026-03-05 16:12:54 - __main__ - INFO - Encerrando aplicação...
