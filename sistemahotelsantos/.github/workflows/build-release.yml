@@ -57,11 +57,15 @@ jobs:
           --hidden-import="PIL" \
           sistemahotelsantos/app_gui.py
 
+      - name: Rename Binary for Release
+        shell: bash
+        run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name_release }}
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name_release }}
-          path: dist/${{ matrix.artifact_name }}
+          path: dist/${{ matrix.asset_name_release }}
 
   release:
     needs: build
