@@ -22,7 +22,7 @@ class UpdateManager:
     GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     
     def __init__(self):
-        self.versao_atual = "5.0"  # Versão do aplicativo (Sincronizada)
+        self.versao_atual = "5.0.1"  # Versão do aplicativo (Sincronizada)
         self.arquivo_versao = Path.home() / ".shs_version"
         self.carregar_versao()
     
@@ -32,7 +32,7 @@ class UpdateManager:
             if self.arquivo_versao.exists():
                 with open(self.arquivo_versao, 'r') as f:
                     data = json.load(f)
-                    self.versao_atual = data.get('versao', '5.0') # Reativa a leitura, mantendo 5.0 como padrão
+                    self.versao_atual = data.get('versao', '5.0.1') # Reativa a leitura, mantendo 5.0.1 como padrão
         except Exception as e:
             print(f"⚠️ Erro ao carregar versão: {e}")
     
