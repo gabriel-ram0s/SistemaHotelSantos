@@ -20,7 +20,7 @@ from urllib.parse import quote
 import threading
 import traceback
 
-from update_manager import verificar_atualizacao_ao_iniciar
+from update_manager import UpdateManager
 try:
     from tkcalendar import Calendar
 except ImportError:
@@ -37,6 +37,7 @@ class AppHotelLTS(ctk.CTk):
 
         # --- Declaração de Atributos de Instância para Type Hinting ---
         self.core: SistemaCreditos
+        self.update_manager: UpdateManager
         self.colors: dict[str, str]
         self.current_user: dict | None = None
         self.search_job: str | None = None
@@ -91,6 +92,7 @@ class AppHotelLTS(ctk.CTk):
 
         # Carrega o core e o tema PREVIAMENTE para evitar conflito de cores (Treeview vs CTk)
         self.core = SistemaCreditos()
+        self.update_manager = UpdateManager()
         saved_theme = self.core.get_config('tema')
         ctk.set_appearance_mode("Dark" if saved_theme == 1 else "Light")
         ctk.set_default_color_theme("green")
@@ -155,9 +157,6 @@ class AppHotelLTS(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=15)
         self.main_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         self.tela_login()
-
-        # Verificar atualizações ao iniciar
-        self.after(2000, lambda: verificar_atualizacao_ao_iniciar(self))
 
     # =========================================================================
     # 1. SETUP & CORE (Estilos, Configurações Globais)
@@ -240,13 +239,13 @@ class AppHotelLTS(ctk.CTk):
                     print("INFO: Verificação de update pulada (rodando como script).")
                     return
 
-                tem_update, nova_versao, url = self.core.verificar_atualizacao()
+                tem_update, nova_versao, url = self.update_manager.verificar_atualizacao()
                 if tem_update:
                     # Agendamos a chamada do messagebox na thread principal
                     self.after(0, self.mostrar_botao_update, nova_versao, url)
             except Exception as e:
                 print(f"Erro ao verificar atualização: {e}") # Log silencioso no console
-
+        
         threading.Thread(target=_task, daemon=True).start()
 
     def mostrar_botao_update(self, nova_versao: str, url: str) -> None:
@@ -263,9 +262,9 @@ class AppHotelLTS(ctk.CTk):
                                f"Uma nova versão ({nova_versao}) está disponível!\n"
                                "Deseja baixar e instalar agora?\n\n"
                                "O aplicativo será reiniciado."):
-            self.iniciar_janela_de_progresso(url)
+            self.iniciar_janela_de_progresso(url, nova_versao)
 
-    def iniciar_janela_de_progresso(self, url: str) -> None:
+    def iniciar_janela_de_progresso(self, url: str, nova_versao: str) -> None:
         """Cria a janela de progresso e inicia o download."""
         janela_progresso = ctk.CTkToplevel(self)
         janela_progresso.title("Atualizando...")
@@ -291,14 +290,8 @@ class AppHotelLTS(ctk.CTk):
             else:
                 lbl_status.configure(text=f"{int(progress * 100)}%")
         
-        def download_task():
-            try:
-                nome_executavel = os.path.basename(sys.executable)
-                self.core.aplicar_atualizacao(url, nome_executavel, progress_callback=lambda p, s=None: self.after(0, update_callback, p, s))
-            except Exception as e:
-                self.after(0, lambda: [janela_progresso.destroy(), messagebox.showerror("Erro de Atualização", f"Não foi possível concluir a atualização:\n{e}")])
-
-        threading.Thread(target=download_task, daemon=True).start()
+        # A função aplicar_atualizacao já roda em uma thread e lida com erros
+        self.update_manager.aplicar_atualizacao(url, nova_versao, progress_callback=lambda p, s=None: self.after(0, update_callback, p, s))
 
     def verificar_update_manual(self) -> None:
         """Verifica manualmente por atualizações e informa o usuário."""
@@ -312,7 +305,7 @@ class AppHotelLTS(ctk.CTk):
                     self.after(0, lambda: messagebox.showinfo("Aviso", "A verificação de atualização só funciona no aplicativo compilado (instalador)."))
                     return
 
-                tem_update, nova_versao, url = self.core.verificar_atualizacao()
+                tem_update, nova_versao, url = self.update_manager.verificar_atualizacao()
 
                 if tem_update:
                     # Agendamos a chamada do messagebox na thread principal
@@ -358,7 +351,8 @@ class AppHotelLTS(ctk.CTk):
                 self.sidebar.pack(side="left", fill="y")
                 self.main_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
                 self.tela_home()
-                self.verificar_e_notificar_update()
+                # Verifica atualizações 2 segundos após o login bem-sucedido
+                self.after(2000, self.verificar_e_notificar_update)
             else:
                 messagebox.showerror("Erro", "Credenciais inválidas")
                 

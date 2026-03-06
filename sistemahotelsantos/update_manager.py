@@ -13,7 +13,7 @@ from datetime import datetime
 import threading
 import requests
 from tkinter import messagebox
-
+from typing import Optional, Tuple, Callable
 class UpdateManager:
     """Gerencia atualizações do aplicativo"""
     
@@ -144,88 +144,86 @@ class UpdateManager:
         thread = threading.Thread(target=_check, daemon=True)
         thread.start()
     
-    def baixar_atualizar(self, versao_nova, url_download, callback=None):
-        """Baixa e instala a atualização"""
-        def _download():
+    def aplicar_atualizacao(self, url_download: str, versao_nova: str, progress_callback: Optional[Callable] = None) -> None:
+        """
+        Baixa o novo executável, cria um script para substituí-lo e reinicia o app.
+        """
+        def _task():
             try:
-                print(f"📥 Baixando {versao_nova}...")
+                is_windows = platform.system() == 'Windows'
                 
-                # Caminho para salvar
-                if platform.system() == "Windows":
-                    app_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.getcwd()
-                    download_path = Path(app_path) / "SistemaHotelSantos.exe.new"
-                else:
-                    download_path = Path.home() / "SistemaHotelSantos.new"
+                # Garante que estamos trabalhando com caminhos absolutos
+                exec_path = os.path.abspath(sys.executable)
+                exec_dir = os.path.dirname(exec_path)
+                exec_name = os.path.basename(exec_path)
+        
+                # Define nomes para o arquivo temporário e o script de atualização
+                temp_suffix = ".exe" if is_windows else ""
+                temp_path = os.path.join(exec_dir, f"update_temp{temp_suffix}")
                 
-                # Baixar arquivo
-                response = requests.get(url_download, timeout=30, stream=True)
-                total_size = int(response.headers.get('content-length', 0))
+                # 1. Baixar o novo arquivo
+                r = requests.get(url_download, stream=True, timeout=30)
+                r.raise_for_status()
                 
-                with open(download_path, 'wb') as f:
-                    downloaded = 0
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            percent = (downloaded / total_size * 100) if total_size else 0
-                            print(f"   {percent:.1f}% baixado")
-                            if callback:
-                                callback(percent)
+                total_size = int(r.headers.get('content-length', 0))
+                downloaded_size = 0
                 
-                print(f"✅ Download concluído!")
-                
-                # Backup do atual
-                if platform.system() == "Windows":
-                    current_exe = Path(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.getcwd()) / "SistemaHotelSantos.exe"
-                    backup_exe = current_exe.with_suffix('.exe.backup')
-                    if current_exe.exists():
-                        current_exe.rename(backup_exe)
-                    download_path.rename(current_exe)
-                else:
-                    current_exe = Path.home() / "SistemaHotelSantos"
-                    backup_exe = current_exe.with_suffix('.backup')
-                    if current_exe.exists():
-                        current_exe.rename(backup_exe)
-                    download_path.rename(current_exe)
-                    current_exe.chmod(0o755)
-                
-                # Salvar versão
+                with open(temp_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        if progress_callback and total_size > 0:
+                            progress = downloaded_size / total_size
+                            progress_callback(progress, None)
+            
+                # 2. Criar script de atualização e executar
+                if is_windows:
+                    updater_path = os.path.join(exec_dir, "updater.bat")
+                    bat_script = f"""
+                    @echo off
+                    echo Atualizando o sistema... Por favor, aguarde.
+                    timeout /t 3 /nobreak > NUL
+                    :retry
+                    del "{exec_path}"
+                    if exist "{exec_path}" (
+                        echo Arquivo ainda em uso, tentando novamente em 2 segundos...
+                        timeout /t 2 /nobreak > NUL
+                        goto retry
+                    )
+                    ren "{temp_path}" "{exec_name}"
+                    start "" "{exec_path}"
+                    del "{updater_path}"
+                    """
+                    with open(updater_path, "w", encoding="utf-8") as bat:
+                        bat.write(bat_script)
+                    
+                    if progress_callback: progress_callback(1.0, "finalizando")
+                    subprocess.Popen(updater_path, shell=True, cwd=exec_dir, creationflags=subprocess.DETACHED_PROCESS)
+                else: # Linux/Unix
+                    updater_path = os.path.join(exec_dir, "updater.sh")
+                    os.chmod(temp_path, 0o755)
+                    
+                    sh_script = f"""#!/bin/bash
+                    echo "Atualizando..."
+                    sleep 3
+                    rm -f "{exec_path}"
+                    mv "{temp_path}" "{exec_path}"
+                    nohup "{exec_path}" >/dev/null 2>&1 &
+                    rm -- "$0"
+                    """
+                    with open(updater_path, "w") as sh:
+                        sh.write(sh_script)
+                    os.chmod(updater_path, 0o755)
+                    
+                    if progress_callback: progress_callback(1.0, "finalizando")
+                    subprocess.Popen(["/bin/bash", updater_path], cwd=exec_dir, start_new_session=True)
+
                 self.salvar_versao(versao_nova)
-                
-                print(f"✅ Atualização instalada!")
-                messagebox.showinfo(
-                    "Atualização Concluída",
-                    f"Sistema atualizado para v{versao_nova}\n\n"
-                    "Reinicie o aplicativo para as mudanças entrarem em efeito."
-                )
+                os._exit(0)
                 
             except Exception as e:
-                print(f"❌ Erro ao baixar: {e}")
-                messagebox.showerror("Erro na Atualização", f"Erro: {e}")
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise Exception(f"Falha ao atualizar: {e}")
         
-        thread = threading.Thread(target=_download, daemon=True)
-        thread.start()
-
-
-def verificar_atualizacao_ao_iniciar(root):
-    """Verifica atualização ao iniciar o app"""
-    manager = UpdateManager()
-    
-    def on_check(tem_update, versao_nova, url_download):
-        if tem_update:
-            resposta = messagebox.askyesno(
-                "Nova Versão Disponível",
-                f"Versão {versao_nova} disponível!\n\n"
-                f"Deseja atualizar agora?"
-            )
-            
-            if resposta:
-                messagebox.showinfo(
-                    "Atualizando",
-                    "Baixando nova versão...\n"
-                    "Isto pode levar alguns minutos."
-                )
-                manager.baixar_atualizar(versao_nova, url_download)
-    
-    # Verificar em background
-    manager.verificar_atualizacao(callback=on_check)
+        threading.Thread(target=_task, daemon=True).start()

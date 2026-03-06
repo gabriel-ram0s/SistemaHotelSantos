@@ -2,18 +2,16 @@ name: Build & Release
 
 on:
   push:
-    branches:
-      - main
-      - develop
     tags:
-      - 'v*'
+      - 'v*' # Roda apenas quando uma tag de versão (ex: v1.2.3) é enviada
   workflow_dispatch:
 
-env:
-  PYTHON_VERSION: '3.12'
+permissions:
+  contents: write # Necessário para a action softprops/action-gh-release criar a release
 
 jobs:
   build:
+    name: Build for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -21,108 +19,63 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: SistemaHotelSantos.exe
-            asset_name: SistemaHotelSantos-Windows.exe
+            asset_name_release: SistemaHotelSantos-Windows.exe
+            sep: ';'
           - os: ubuntu-latest
             artifact_name: SistemaHotelSantos
-            asset_name: SistemaHotelSantos-Ubuntu
+            asset_name_release: SistemaHotelSantos-Ubuntu
+            sep: ':'
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller customtkinter tkcalendar fpdf2 requests
+          pip install pyinstaller
+          # Instala as dependências do seu projeto a partir do requirements.txt
+          pip install -r sistemahotelsantos/requirements.txt
+          # Instala babel explicitamente, uma dependência oculta comum do tkcalendar
+          pip install babel
 
-      - name: Create spec file (Windows)
-        if: runner.os == 'Windows'
+      - name: Build with PyInstaller
+        # O comando é unificado para Windows e Linux, usando a variável de separador de path
         run: |
-          pyinstaller --name="SistemaHotelSantos" `
-            --onefile `
-            --windowed `
-            --icon="sistemahotelsantos/app.ico" `
-            --add-data="sistemahotelsantos/app.ico;." `
-            --distpath="./dist" `
-            --buildpath="./build" `
-            --specpath="./spec" `
-            sistemahotelsantos/app_gui.py
+          pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm \
+          --icon="sistemahotelsantos/app.ico" \
+          --add-data="sistemahotelsantos/app.ico${{ matrix.sep }}." \
+          --paths="sistemahotelsantos" \
+          --hidden-import="babel.numbers" \
+          --hidden-import="PIL" \
+          sistemahotelsantos/app_gui.py
 
-      - name: Create spec file (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          pyinstaller --name="SistemaHotelSantos" \
-            --onefile \
-            --windowed \
-            --add-data="sistemahotelsantos/app.ico:." \
-            --distpath="./dist" \
-            --buildpath="./build" \
-            --specpath="./spec" \
-            sistemahotelsantos/app_gui.py
-
-      - name: Make executable (Linux)
-        if: runner.os == 'Linux'
-        run: chmod +x dist/SistemaHotelSantos
-
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v3
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: SistemaHotelSantos-Windows
-          path: dist/SistemaHotelSantos.exe
+          name: ${{ matrix.asset_name_release }}
+          path: dist/${{ matrix.artifact_name }}
 
-      - name: Upload artifact (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v3
-        with:
-          name: SistemaHotelSantos-Ubuntu
-          path: dist/SistemaHotelSantos
-
-  create-release:
+  release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
-      - uses: actions/checkout@v3
-
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          files: artifacts/*/*
           draft: false
           prerelease: false
-
-      - name: Upload Windows EXE
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/SistemaHotelSantos-Windows/SistemaHotelSantos.exe
-          asset_name: SistemaHotelSantos-Windows.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux executable
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/SistemaHotelSantos-Ubuntu/SistemaHotelSantos
-          asset_name: SistemaHotelSantos-Ubuntu
-          asset_content_type: application/octet-stream
+          generate_release_notes: true # Gera o changelog automaticamente a partir dos commits

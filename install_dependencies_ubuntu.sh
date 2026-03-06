@@ -49,8 +49,7 @@ pip install --break-system-packages --upgrade pip
 # Instalar todas as dependências com o flag necessário
 echo ""
 echo "2/2: Instalando bibliotecas (Ubuntu PEP 668)..."
-pip install --break-system-packages customtkinter tkcalendar fpdf2 requests pytest pytest-cov
-pip install --break-system-packages customtkinter tkcalendar fpdf2 requests pytest pytest-cov matplotlib
+pip install --break-system-packages -r sistemahotelsantos/requirements.txt
 
 if [ $? -ne 0 ]; then
     echo ""
