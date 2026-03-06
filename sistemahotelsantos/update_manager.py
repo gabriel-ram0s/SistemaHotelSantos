@@ -74,74 +74,58 @@ class UpdateManager:
         except:
             return 0
     
-    def verificar_atualizacao(self, callback=None):
+    def verificar_atualizacao(self) -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        Verifica se há nova versão disponível
-        callback(tem_atualizacao, versao_nova, url_download)
+        Verifica se há nova versão disponível de forma síncrona.
+        Retorna: (tem_atualizacao, versao_nova, url_download)
+        Lança uma exceção em caso de erro de rede.
         """
-        def _check():
-            try:
-                print(f"🔍 Verificando atualizações...")
-                response = requests.get(self.GITHUB_API, timeout=5)
+        try:
+            print(f"🔍 Verificando atualizações...")
+            response = requests.get(self.GITHUB_API, timeout=10)
+            response.raise_for_status() # Lança exceção para status 4xx/5xx
+            
+            data = response.json()
+            versao_nova = data['tag_name'].lstrip('v')
+            
+            print(f"   Versão atual: {self.versao_atual}")
+            print(f"   Versão remota: {versao_nova}")
+            
+            comparacao = self.comparar_versoes(self.versao_atual, versao_nova)
+            
+            if comparacao < 0:
+                # Encontrou versão mais nova
+                print(f"✅ Nova versão disponível: {versao_nova}")
                 
-                if response.status_code != 200:
-                    print(f"⚠️ Erro ao verificar: {response.status_code}")
-                    if callback:
-                        callback(False, None, None)
-                    return
+                # Procurar asset correto
+                assets = data.get('assets', [])
+                url_download = None
                 
-                data = response.json()
-                versao_nova = data['tag_name'].lstrip('v')
+                os_identifier = "Windows" if platform.system() == "Windows" else "Ubuntu"
+                for asset in assets:
+                    if os_identifier in asset['name']:
+                        url_download = asset['browser_download_url']
+                        break
                 
-                print(f"   Versão atual: {self.versao_atual}")
-                print(f"   Versão remota: {versao_nova}")
-                
-                comparacao = self.comparar_versoes(self.versao_atual, versao_nova)
-                
-                if comparacao < 0:
-                    # Encontrou versão mais nova
-                    print(f"✅ Nova versão disponível: {versao_nova}")
-                    
-                    # Procurar asset correto
-                    assets = data.get('assets', [])
-                    url_download = None
-                    
-                    if platform.system() == "Windows":
-                        for asset in assets:
-                            if 'Windows' in asset['name']:
-                                url_download = asset['browser_download_url']
-                                break
-                    else:
-                        for asset in assets:
-                            if 'Ubuntu' in asset['name']:
-                                url_download = asset['browser_download_url']
-                                break
-                    
-                    if url_download:
-                        print(f"📥 Download disponível: {url_download}")
-                        if callback:
-                            callback(True, versao_nova, url_download)
-                    else:
-                        print("⚠️ Asset não encontrado para seu SO")
-                        if callback:
-                            callback(False, None, None)
+                if url_download:
+                    print(f"📥 Download disponível: {url_download}")
+                    return True, versao_nova, url_download
                 else:
-                    print("✅ Você está na versão mais recente")
-                    if callback:
-                        callback(False, None, None)
-                        
-            except requests.exceptions.Timeout:
-                print("⚠️ Timeout ao verificar atualizações")
-                if callback:
-                    callback(False, None, None)
-            except Exception as e:
-                print(f"❌ Erro ao verificar: {e}")
-                if callback:
-                    callback(False, None, None)
-        
-        # Executar em thread para não travar UI
-        thread = threading.Thread(target=_check, daemon=True)
-        thread.start()
+                    # Isso não deve ser um erro fatal, apenas informa que não há build para o SO
+                    print(f"⚠️ Nova versão {versao_nova} encontrada, mas sem build para {os_identifier}.")
+                    return False, None, None
+            else:
+                print("✅ Você está na versão mais recente.")
+                return False, None, None
+                    
+        except requests.exceptions.Timeout:
+            raise Exception("Tempo esgotado ao verificar atualizações. Verifique sua conexão com a internet.")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Erro de rede ao verificar atualizações: {e}")
+        except Exception as e:
+            # Captura outros erros (JSON inválido, etc) e os relança para a GUI
+            print(f"❌ Erro inesperado ao verificar: {e}")
+            raise e
     
     def aplicar_atualizacao(self, url_download: str, versao_nova: str, progress_callback: Optional[Callable] = None) -> None:
         """
