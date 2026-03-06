@@ -1,3 +1,13 @@
+/home/gabriel/SistemaHotelSantos/
+├── .github/
+│   └── workflows/
+│       └── build-release.yml
+├── sistemahotelsantos/
+│   ├── app_gui.py
+│   ├── sistema_clientes.py
+│   └── ...
+├── .gitignore
+└── ...
 import sys
 import os
 

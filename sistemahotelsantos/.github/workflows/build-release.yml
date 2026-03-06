@@ -1,0 +1,128 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            artifact_name: SistemaHotelSantos.exe
+            asset_name: SistemaHotelSantos-Windows.exe
+          - os: ubuntu-latest
+            artifact_name: SistemaHotelSantos
+            asset_name: SistemaHotelSantos-Ubuntu
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller customtkinter tkcalendar fpdf2 requests
+
+      - name: Create spec file (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --name="SistemaHotelSantos" `
+            --onefile `
+            --windowed `
+            --icon="sistemahotelsantos/app.ico" `
+            --add-data="sistemahotelsantos/app.ico;." `
+            --distpath="./dist" `
+            --buildpath="./build" `
+            --specpath="./spec" `
+            sistemahotelsantos/app_gui.py
+
+      - name: Create spec file (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          pyinstaller --name="SistemaHotelSantos" \
+            --onefile \
+            --windowed \
+            --add-data="sistemahotelsantos/app.ico:." \
+            --distpath="./dist" \
+            --buildpath="./build" \
+            --specpath="./spec" \
+            sistemahotelsantos/app_gui.py
+
+      - name: Make executable (Linux)
+        if: runner.os == 'Linux'
+        run: chmod +x dist/SistemaHotelSantos
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v3
+        with:
+          name: SistemaHotelSantos-Windows
+          path: dist/SistemaHotelSantos.exe
+
+      - name: Upload artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v3
+        with:
+          name: SistemaHotelSantos-Ubuntu
+          path: dist/SistemaHotelSantos
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Windows EXE
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/SistemaHotelSantos-Windows/SistemaHotelSantos.exe
+          asset_name: SistemaHotelSantos-Windows.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/SistemaHotelSantos-Ubuntu/SistemaHotelSantos
+          asset_name: SistemaHotelSantos-Ubuntu
+          asset_content_type: application/octet-stream
