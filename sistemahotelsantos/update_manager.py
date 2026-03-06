@@ -22,7 +22,7 @@ class UpdateManager:
     GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     
     def __init__(self):
-        self.versao_atual = "4.9.4"  # Versão do aplicativo (Sincronizada)
+        self.versao_atual = "5.0"  # Versão do aplicativo (Sincronizada)
         self.arquivo_versao = Path.home() / ".shs_version"
         self.carregar_versao()
     
