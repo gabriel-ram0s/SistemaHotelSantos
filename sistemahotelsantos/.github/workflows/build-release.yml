@@ -46,18 +46,19 @@ jobs:
           pip install -r sistemahotelsantos/requirements.txt
  
       - name: Build with PyInstaller
+        working-directory: ./sistemahotelsantos
         shell: bash
         run: |
           pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm \
-          --icon="sistemahotelsantos/app.ico" \
-          --add-data="sistemahotelsantos/app.ico${{ matrix.sep }}." \
-          --paths="sistemahotelsantos" \
+          --icon="app.ico" \
+          --add-data="app.ico${{ matrix.sep }}." \
           --hidden-import="babel.numbers" \
           --hidden-import="PIL.ImageTk" \
           --hidden-import="fpdf.fpdf" \
-          sistemahotelsantos/app_gui.py
+          app_gui.py
  
       - name: Rename Binary for Release
+        working-directory: ./sistemahotelsantos
         shell: bash
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name_release }}
  
@@ -65,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name_release }}
-          path: dist/${{ matrix.asset_name_release }}
+          path: sistemahotelsantos/dist/${{ matrix.asset_name_release }}
 
   release:
     needs: build
