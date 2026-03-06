@@ -3,88 +3,72 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'v*.*'
-      - '*.*.*'
-      - '*.*'
-  workflow_dispatch:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
         include:
           - os: windows-latest
-            artifact_name: SistemaHotelSantos.exe
-            asset_name_release: SistemaHotelSantos-Windows.exe
-            sep: ';'
+            nome_saida: SistemaHotelSantos-Windows.exe
           - os: ubuntu-latest
-            artifact_name: SistemaHotelSantos
-            asset_name_release: SistemaHotelSantos-Ubuntu
-            sep: ':'
- 
+            nome_saida: SistemaHotelSantos-Linux
+
     steps:
-      - name: Checkout repository
+      - name: Clonar repositório
         uses: actions/checkout@v4
- 
-      - name: Set up Python 3.12
+
+      - name: Instalar Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
- 
-      - name: Install dependencies
-        shell: bash
+
+      - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r sistemahotelsantos/requirements.txt
- 
-      - name: Build executable with PyInstaller
-        working-directory: ./sistemahotelsantos
-        shell: bash
+
+      - name: Criar executável
         run: |
-          pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm \
-          --icon="app.ico" \
-          --add-data="app.ico${{ matrix.sep }}." \
-          --hidden-import="babel.numbers" \
-          --hidden-import="PIL.ImageTk" \
-          --hidden-import="fpdf" \
-          app_gui.py
- 
-      - name: Rename binary for release
-        working-directory: ./sistemahotelsantos
+          cd sistemahotelsantos
+          pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm --icon="app.ico" app_gui.py
+
+      - name: Renomear arquivo
+        run: |
+          cd sistemahotelsantos/dist
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            ren SistemaHotelSantos.exe ${{ matrix.nome_saida }}
+          else
+            mv SistemaHotelSantos ${{ matrix.nome_saida }}
+          fi
         shell: bash
-        run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name_release }}
- 
-      - name: Upload artifact
+
+      - name: Upload executável
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name_release }}
-          path: sistemahotelsantos/dist/${{ matrix.asset_name_release }}
+          name: ${{ matrix.nome_saida }}
+          path: sistemahotelsantos/dist/${{ matrix.nome_saida }}
 
   release:
-    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
- 
+
     steps:
-      - name: Download all build artifacts
+      - name: Baixar arquivos
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
- 
-      - name: Create Release and upload assets
+          path: arquivos
+
+      - name: Criar Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          files: arquivos/*/*
