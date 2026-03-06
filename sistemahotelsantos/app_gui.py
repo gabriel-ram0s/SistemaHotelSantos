@@ -1,13 +1,3 @@
-/home/gabriel/SistemaHotelSantos/
-├── .github/
-│   └── workflows/
-│       └── build-release.yml
-├── sistemahotelsantos/
-│   ├── app_gui.py
-│   ├── sistema_clientes.py
-│   └── ...
-├── .gitignore
-└── ...
 import sys
 import os
 
@@ -105,16 +95,33 @@ class AppHotelLTS(ctk.CTk):
         try: self.after(0, lambda: self.state('zoomed'))
         except: pass
 
+        # --- PALETA DE CORES FOSCAS (MATTE) & SINGULARES ---
         self.colors = {
-            "verde": "#3b82f6",       # Blue 500 (Alterado para teste GitHub)
-            "verde_hover": "#2563eb", # Blue 600
-            "dourado": "#f59e0b",     # Amber 500
-            "dourado_hover": "#d97706", # Amber 600
-            "vermelho": "#ef4444",    # Red 500
-            "vermelho_hover": "#dc2626", # Red 600
-            "branco": "#f8fafc",      # Slate 50
-            "sidebar_bg": "#0f172a",  # Slate 900 (Mais escuro)
-            "sidebar_txt": "#e2e8f0"  # Slate 200
+            # Cores de Ação Genéricas (Matte)
+            "sucesso": "#059669",       # Emerald 600 (Substituto do verde neon)
+            "sucesso_hover": "#047857", # Emerald 700
+            "perigo": "#dc2626",        # Red 600
+            "perigo_hover": "#b91c1c",  # Red 700
+            "aviso": "#d97706",         # Amber 600
+            
+            # Cores Singulares por Módulo
+            "hospedes": "#0d9488",       # Teal 600 (Fosco)
+            "hospedes_hover": "#0f766e", # Teal 700
+            "financeiro": "#15803d",     # Green 700 (Fosco/Dinheiro)
+            "financeiro_hover": "#14532d",
+            "compras": "#ea580c",        # Orange 600 (Fosco)
+            "compras_hover": "#c2410c",
+            "calendario": "#4f46e5",     # Indigo 600 (Fosco)
+            "calendario_hover": "#4338ca",
+            "dashboard": "#2563eb",      # Blue 600 (Fosco)
+            "dashboard_hover": "#1d4ed8",
+            "ajustes": "#475569",        # Slate 600 (Neutro)
+            "ajustes_hover": "#334155",
+            
+            # UI Base
+            "branco": "#f8fafc",        # Slate 50
+            "sidebar_bg": "#1e293b",    # Slate 800 (Azul acinzentado escuro)
+            "sidebar_txt": "#e2e8f0"    # Slate 200
         }
         self.setup_custom_styles()
         # Configuração do Ícone da Janela
@@ -132,26 +139,27 @@ class AppHotelLTS(ctk.CTk):
         # Sidebar começa oculta até o login
         self.sidebar.pack_propagate(False)
         
-        ctk.CTkLabel(self.sidebar, text="H-SANTOS", font=("Arial", 22, "bold"), text_color=self.colors["verde"]).pack(pady=30)
+        ctk.CTkLabel(self.sidebar, text="H-SANTOS", font=("Arial", 22, "bold"), text_color=self.colors["sucesso"]).pack(pady=30)
         
-        btn_opts = {"height": 40, "anchor": "w", "fg_color": "transparent", "text_color": self.colors["sidebar_txt"], "hover_color": self.colors["verde_hover"]}
-        ctk.CTkButton(self.sidebar, text="🏠 Home", command=self.tela_home, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text="👥 Hóspedes", command=self.tela_hospedes, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text="💰 Financeiro", command=self.tela_financeiro, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text="🛒 Compras", command=self.tela_compras, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text="📅 Calendário", command=self.tela_calendario, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text=" Dashboard", command=self.tela_dash, **btn_opts).pack(pady=5, fill="x", padx=10)
-        ctk.CTkButton(self.sidebar, text="⚙️ Ajustes", command=self.tela_config, **btn_opts).pack(pady=5, fill="x", padx=10)
+        btn_opts = {"height": 40, "anchor": "w", "fg_color": "transparent", "text_color": self.colors["sidebar_txt"]}
+        
+        ctk.CTkButton(self.sidebar, text="🏠 Home", command=self.tela_home, hover_color=self.colors["ajustes_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="👥 Hóspedes", command=self.tela_hospedes, hover_color=self.colors["hospedes_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="💰 Financeiro", command=self.tela_financeiro, hover_color=self.colors["financeiro_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="🛒 Compras", command=self.tela_compras, hover_color=self.colors["compras_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="📅 Calendário", command=self.tela_calendario, hover_color=self.colors["calendario_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="📊 Dashboard", command=self.tela_dash, hover_color=self.colors["dashboard_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(self.sidebar, text="⚙️ Ajustes", command=self.tela_config, hover_color=self.colors["ajustes_hover"], **btn_opts).pack(pady=5, fill="x", padx=10)
         
         # Botão de Logout no final da sidebar
         ctk.CTkFrame(self.sidebar, fg_color="transparent").pack(expand=True, fill="y")
         
         # Botão de Atualização (Inicia oculto)
-        self.btn_update = ctk.CTkButton(self.sidebar, text="⬇️ Atualização", fg_color=self.colors["dourado"], 
-                                        hover_color=self.colors["dourado_hover"], text_color="#1e293b", anchor="center")
+        self.btn_update = ctk.CTkButton(self.sidebar, text="⬇️ Atualização", fg_color=self.colors["aviso"], 
+                                        hover_color="#b45309", text_color="#ffffff", anchor="center")
         # Não fazemos pack aqui, apenas quando houver update
 
-        self.btn_sair = ctk.CTkButton(self.sidebar, text=" 🚪 Sair", command=self.logout, **btn_opts)
+        self.btn_sair = ctk.CTkButton(self.sidebar, text=" 🚪 Sair", command=self.logout, hover_color=self.colors["perigo_hover"], **btn_opts)
         self.btn_sair.pack(pady=20, fill="x", padx=10)
 
         self.main_frame = ctk.CTkFrame(self, corner_radius=15)
@@ -185,7 +193,7 @@ class AppHotelLTS(ctk.CTk):
                         rowheight=35,
                         borderwidth=0)
         style.configure("Treeview.Heading", background=header_bg, foreground=fg_color, relief="flat", font=("Arial", 11, "bold"))
-        style.map("Treeview", background=[("selected", self.colors["verde"])], foreground=[("selected", selected_fg)])
+        style.map("Treeview", background=[("selected", self.colors["ajustes"])], foreground=[("selected", selected_fg)])
 
     def configurar_tags_tabela(self, tree: ttk.Treeview) -> None:
         """Aplica configurações de cores para linhas pares, ímpares e saídas, adaptando-se ao tema."""
@@ -202,11 +210,11 @@ class AppHotelLTS(ctk.CTk):
         
         tree.tag_configure('odd', background=odd_bg)
         tree.tag_configure('even', background=even_bg)
-        tree.tag_configure('saida', foreground=self.colors["vermelho"])
-        tree.tag_configure('multa', foreground=self.colors["dourado"])
-        tree.tag_configure('pagamento_multa', foreground=self.colors["verde"])
-        tree.tag_configure('seta_subiu', foreground=self.colors["vermelho"])
-        tree.tag_configure('seta_desceu', foreground=self.colors["verde"])
+        tree.tag_configure('saida', foreground=self.colors["perigo"])
+        tree.tag_configure('multa', foreground=self.colors["aviso"])
+        tree.tag_configure('pagamento_multa', foreground=self.colors["sucesso"])
+        tree.tag_configure('seta_subiu', foreground=self.colors["perigo"])
+        tree.tag_configure('seta_desceu', foreground=self.colors["sucesso"])
 
     def on_closing(self) -> None:
         """Encerra o processo de forma limpa"""
@@ -358,7 +366,7 @@ class AppHotelLTS(ctk.CTk):
                 
         ep.bind("<Return>", tentar_login)
         
-        ctk.CTkButton(f, text="Entrar", command=tentar_login, width=200, fg_color=self.colors["verde"], hover_color=self.colors["verde_hover"]).pack(pady=20)
+        ctk.CTkButton(f, text="Entrar", command=tentar_login, width=200, fg_color=self.colors["sucesso"], hover_color=self.colors["sucesso_hover"]).pack(pady=20)
 
     # =========================================================================
     # 3. NAVEGAÇÃO PRINCIPAL
@@ -369,14 +377,14 @@ class AppHotelLTS(ctk.CTk):
         self.current_screen_kwargs = {}
 
         self.limpar_tela()
-        ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Arial", 28, "bold"), text_color=self.colors["verde"]).pack(pady=60)
+        ctk.CTkLabel(self.main_frame, text="Controle de Créditos - Hotel Santos", font=("Arial", 28, "bold"), text_color=self.colors["sucesso"]).pack(pady=60)
         grid = ctk.CTkFrame(self.main_frame, fg_color="transparent"); grid.pack()
         
         # Definição de cores (Light, Dark) para melhor contraste e visual no modo escuro
-        btns = [("👥 HÓSPEDES", self.tela_hospedes, (self.colors["verde"], "#059669")),   # Emerald 500 / 600
-                ("💰 FINANCEIRO", self.tela_financeiro, (self.colors["dourado"], "#d97706")), # Amber 500 / 600
-                ("🛒 COMPRAS", self.tela_compras, ("#0af364", "#ea580c")),       # Orange 500 / 600
-                ("⚙️ AJUSTES", self.tela_config, ("#64748b", "#334155"))]        # Slate 500 / 700
+        btns = [("👥 HÓSPEDES", self.tela_hospedes, (self.colors["hospedes"], self.colors["hospedes_hover"])),
+                ("💰 FINANCEIRO", self.tela_financeiro, (self.colors["financeiro"], self.colors["financeiro_hover"])),
+                ("🛒 COMPRAS", self.tela_compras, (self.colors["compras"], self.colors["compras_hover"])),
+                ("⚙️ AJUSTES", self.tela_config, (self.colors["ajustes"], self.colors["ajustes_hover"]))]
 
         for i, (t, c, col) in enumerate(btns):
             ctk.CTkButton(grid, text=t, width=250, height=90, command=c, fg_color=col, font=("Arial", 14, "bold")).grid(row=i//2, column=i%2, padx=20, pady=20)
@@ -392,8 +400,8 @@ class AppHotelLTS(ctk.CTk):
         self.limpar_tela()
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=10)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkLabel(nav, text="LISTAGEM DE HÓSPEDES", font=("Arial", 18, "bold"), text_color=self.colors["verde"]).pack(side="left", padx=20)
-        ctk.CTkButton(nav, text="+ Novo Hóspede", width=120, fg_color=self.colors["dourado"], hover_color=self.colors["dourado_hover"], command=self.janela_cadastro_hospede).pack(side="right")
+        ctk.CTkLabel(nav, text="LISTAGEM DE HÓSPEDES", font=("Arial", 18, "bold"), text_color=self.colors["hospedes"]).pack(side="left", padx=20)
+        ctk.CTkButton(nav, text="+ Novo Hóspede", width=120, fg_color=self.colors["hospedes"], hover_color=self.colors["hospedes_hover"], command=self.janela_cadastro_hospede).pack(side="right")
 
         self.ent_busca = ctk.CTkEntry(self.main_frame, placeholder_text="Pesquisar por nome ou documento...", width=500)
         self.ent_busca.pack(pady=10)
@@ -466,13 +474,13 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkButton(top, text="💬 WhatsApp", fg_color="#25D366", hover_color="#128C7E", width=100, command=lambda: self.enviar_whatsapp(nome, str(doc))).pack(side="right", padx=5)
         ctk.CTkButton(top, text=" Extrato", fg_color="#2c3e50", width=80, command=lambda: self.emitir_extrato(nome, doc)).pack(side="right", padx=5)
         ctk.CTkButton(top, text="📄 Ticket Multas", fg_color="#c0392b", width=80, command=lambda: self.emitir_extrato_multas(nome, doc)).pack(side="right", padx=5)
-        ctk.CTkButton(top, text="📄 PDF Voucher", fg_color=self.colors["verde"], width=100, command=lambda: self.emitir_voucher(nome, doc)).pack(side="right", padx=5)
+        ctk.CTkButton(top, text="📄 PDF Voucher", fg_color=self.colors["sucesso"], width=100, command=lambda: self.emitir_voucher(nome, doc)).pack(side="right", padx=5)
         ctk.CTkLabel(f_esq, text=f"Histórico Financeiro: {nome}", font=("Arial", 20, "bold")).pack(pady=10)
 
         form = ctk.CTkFrame(f_esq, fg_color="transparent"); form.pack(fill="x", pady=5)
-        ctk.CTkButton(form, text="Adicionar Crédito", fg_color=self.colors["verde"], command=lambda: self.janela_add_credito(doc, nome)).pack(side="left", padx=5)
-        ctk.CTkButton(form, text="Utilizar Crédito", fg_color=self.colors["vermelho"], command=lambda: self.janela_usar_credito(doc, nome)).pack(side="left", padx=5)
-        ctk.CTkButton(form, text="Lançar Multa", fg_color=self.colors["dourado"], text_color="black", command=lambda: self.janela_add_multa(doc, nome)).pack(side="left", padx=5)
+        ctk.CTkButton(form, text="Adicionar Crédito", fg_color=self.colors["sucesso"], command=lambda: self.janela_add_credito(doc, nome)).pack(side="left", padx=5)
+        ctk.CTkButton(form, text="Utilizar Crédito", fg_color=self.colors["perigo"], command=lambda: self.janela_usar_credito(doc, nome)).pack(side="left", padx=5)
+        ctk.CTkButton(form, text="Lançar Multa", fg_color=self.colors["aviso"], text_color="white", command=lambda: self.janela_add_multa(doc, nome)).pack(side="left", padx=5)
         ctk.CTkButton(form, text="Pagar Multa", fg_color="#27ae60", command=lambda: self.janela_pagar_multa(doc, nome)).pack(side="left", padx=5)
 
         self.tree_z = ttk.Treeview(f_esq, columns=("T", "V", "D", "C", "U"), show='headings', height=10)
@@ -499,9 +507,9 @@ class AppHotelLTS(ctk.CTk):
         s, v, b = self.core.get_saldo_info(doc)
         divida = self.core.get_divida_multas(doc)
         
-        info_cards = [("Saldo de Crédito", f"R$ {s:.2f}", self.colors["verde"]), 
-                      ("Vencimento Próximo", v, self.colors["vermelho"] if b else "#f39c12"),
-                      ("Dívida (Multas)", f"R$ {divida:.2f}", self.colors["dourado"] if divida > 0 else "gray")]
+        info_cards = [("Saldo de Crédito", f"R$ {s:.2f}", self.colors["sucesso"]), 
+                      ("Vencimento Próximo", v, self.colors["perigo"] if b else self.colors["aviso"]),
+                      ("Dívida (Multas)", f"R$ {divida:.2f}", self.colors["aviso"] if divida > 0 else "gray")]
 
         for t, val, col in info_cards:
             c = ctk.CTkFrame(f_dir, border_width=1); c.pack(fill="x", pady=5, ipady=10)
@@ -513,7 +521,7 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkLabel(p, text="📌 NOTAS GERAIS", text_color="#854d0e", font=("Arial", 12, "bold")).pack(pady=5)
         txt = ctk.CTkTextbox(p, fg_color="transparent", text_color="black"); txt.pack(fill="both", expand=True, padx=5)
         txt.insert("1.0", self.core.get_anotacao(doc))
-        ctk.CTkButton(p, text="Salvar Notas", width=100, fg_color=self.colors["dourado"], text_color="white", command=lambda: self.core.salvar_anotacao(doc, txt.get("1.0","end-1c"))).pack(pady=5)
+        ctk.CTkButton(p, text="Salvar Notas", width=100, fg_color=self.colors["aviso"], text_color="white", command=lambda: self.core.salvar_anotacao(doc, txt.get("1.0","end-1c"))).pack(pady=5)
 
     def enviar_whatsapp(self, nome: str, doc: str) -> None:
         s, v, b = self.core.get_saldo_info(doc)
@@ -611,7 +619,7 @@ class AppHotelLTS(ctk.CTk):
         dias_config = self.core.get_config('alerta_dias')
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkButton(nav, text="📥 Exportar Relatório CSV", fg_color=self.colors["verde"], width=180, command=lambda: [
+        ctk.CTkButton(nav, text="📥 Exportar Relatório CSV", fg_color=self.colors["dashboard"], width=180, command=lambda: [
             messagebox.showinfo("Exportado", f"Relatório salvo em:\n{self.core.exportar_csv()}")
         ]).pack(side="right")
         
@@ -621,10 +629,10 @@ class AppHotelLTS(ctk.CTk):
 
         cards = ctk.CTkFrame(scroll, fg_color="transparent"); cards.pack(fill="x", pady=10)
         lista_cards = [
-            ("Saldo Total Geral", f"R$ {t:.2f}", self.colors["verde"]), 
-            ("Total Vencidos", f"R$ {v:.2f}", self.colors["vermelho"]), 
-            (f"A Vencer ({dias_config} dias)", f"R$ {av:.2f}", "#f39c12"),
-            ("Base de Clientes", str(q), self.colors["verde"])
+            ("Saldo Total Geral", f"R$ {t:.2f}", self.colors["sucesso"]), 
+            ("Total Vencidos", f"R$ {v:.2f}", self.colors["perigo"]), 
+            (f"A Vencer ({dias_config} dias)", f"R$ {av:.2f}", self.colors["aviso"]),
+            ("Base de Clientes", str(q), self.colors["dashboard"])
         ]
         for tit, val, col in lista_cards:
             c = ctk.CTkFrame(cards, border_width=1); c.pack(side="left", expand=True, padx=5, fill="both", ipady=10)
@@ -641,8 +649,8 @@ class AppHotelLTS(ctk.CTk):
             x = range(len(meses))
             width = 0.35
             
-            ax_bar.bar([i - width/2 for i in x], entradas, width, label='Entradas', color=self.colors["verde"])
-            ax_bar.bar([i + width/2 for i in x], saidas, width, label='Saídas', color=self.colors["vermelho"])
+            ax_bar.bar([i - width/2 for i in x], entradas, width, label='Entradas', color=self.colors["sucesso"])
+            ax_bar.bar([i + width/2 for i in x], saidas, width, label='Saídas', color=self.colors["perigo"])
             
             ax_bar.set_xticks(x); ax_bar.set_xticklabels(meses)
             ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize='small')
@@ -675,7 +683,7 @@ class AppHotelLTS(ctk.CTk):
         # Navegação Superior
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkLabel(nav, text="GESTÃO DE COMPRAS (ORDENS)", font=("Arial", 18, "bold"), text_color="#e67e22").pack(side="left", padx=20)
+        ctk.CTkLabel(nav, text="GESTÃO DE COMPRAS (ORDENS)", font=("Arial", 18, "bold"), text_color=self.colors["compras"]).pack(side="left", padx=20)
 
         # Layout Dividido: Esquerda (Listas) | Direita (Itens da Lista)
         paned = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -687,7 +695,7 @@ class AppHotelLTS(ctk.CTk):
         frame_listas.pack_propagate(False)
 
         ctk.CTkLabel(frame_listas, text="Minhas Listas / Ordens", font=("Arial", 14, "bold")).pack(pady=10)
-        ctk.CTkButton(frame_listas, text="+ Nova Lista", fg_color=self.colors["verde"], command=self.criar_nova_lista).pack(pady=5, padx=10, fill="x")
+        ctk.CTkButton(frame_listas, text="+ Nova Lista", fg_color=self.colors["compras"], hover_color=self.colors["compras_hover"], command=self.criar_nova_lista).pack(pady=5, padx=10, fill="x")
 
         # Treeview Listas
         cols_l = ("ID", "Data", "Status", "Total")
@@ -711,7 +719,7 @@ class AppHotelLTS(ctk.CTk):
         self.frame_acoes_lista = ctk.CTkFrame(self.frame_detalhes, fg_color="transparent")
         self.frame_acoes_lista.pack(fill="x", padx=10)
         
-        self.btn_fechar_lista = ctk.CTkButton(self.frame_acoes_lista, text="🔒 Fechar Lista", fg_color=self.colors["vermelho"], width=120, command=self.fechar_lista_atual)
+        self.btn_fechar_lista = ctk.CTkButton(self.frame_acoes_lista, text="🔒 Fechar Lista", fg_color=self.colors["perigo"], width=120, command=self.fechar_lista_atual)
         self.btn_imprimir_lista = ctk.CTkButton(self.frame_acoes_lista, text="📄 Imprimir PDF", fg_color="#2c3e50", width=120, command=self.imprimir_lista_atual)
         # Botões iniciam ocultos
 
@@ -728,7 +736,7 @@ class AppHotelLTS(ctk.CTk):
         # Configuração da Busca (Copiada da versão anterior)
         bg_list = "#333333" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
         fg_list = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
-        self.lb_sugestoes = Listbox(self.main_frame, width=40, height=5, bg=bg_list, fg=fg_list, selectbackground=self.colors["verde"], selectforeground="white", borderwidth=1, relief="solid")
+        self.lb_sugestoes = Listbox(self.main_frame, width=40, height=5, bg=bg_list, fg=fg_list, selectbackground=self.colors["compras"], selectforeground="white", borderwidth=1, relief="solid")
         
         def autocomplete_prod(event: object) -> None:
             if event.keysym in ['Down', 'Up', 'Return', 'Tab']: return
@@ -756,7 +764,7 @@ class AppHotelLTS(ctk.CTk):
         self.e_val_compras = ctk.CTkEntry(self.frame_add_item, width=90, placeholder_text="Valor Unit.")
         self.e_val_compras.grid(row=1, column=2, padx=5)
         
-        ctk.CTkButton(self.frame_add_item, text="Adicionar", width=80, fg_color=self.colors["verde"], command=self.adicionar_item_lista).grid(row=1, column=3, padx=10)
+        ctk.CTkButton(self.frame_add_item, text="Adicionar", width=80, fg_color=self.colors["compras"], hover_color=self.colors["compras_hover"], command=self.adicionar_item_lista).grid(row=1, column=3, padx=10)
         
         # Binds de Enter
         self.e_prod_compras.bind("<Return>", lambda e: selecionar_sugestao() if self.lb_sugestoes.winfo_ismapped() else self.adicionar_item_lista())
@@ -933,7 +941,7 @@ class AppHotelLTS(ctk.CTk):
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         nav.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkLabel(nav, text="CALENDÁRIO DE FUNCIONÁRIOS", font=("Arial", 18, "bold"), text_color="#3498db").pack(side="left", padx=20)
+        ctk.CTkLabel(nav, text="CALENDÁRIO DE FUNCIONÁRIOS", font=("Arial", 18, "bold"), text_color=self.colors["calendario"]).pack(side="left", padx=20)
 
         # Layout principal
         main_paned = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -962,8 +970,8 @@ class AppHotelLTS(ctk.CTk):
 
         btn_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
         btn_frame.pack(pady=10)
-        ctk.CTkButton(btn_frame, text="Agendar", fg_color=self.colors["verde"], command=self.agendar_funcionario_selecionado).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Remover", fg_color=self.colors["vermelho"], command=self.remover_agendamento_selecionado).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Agendar", fg_color=self.colors["calendario"], hover_color=self.colors["calendario_hover"], command=self.agendar_funcionario_selecionado).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Remover", fg_color=self.colors["perigo"], command=self.remover_agendamento_selecionado).pack(side="left", padx=5)
 
         # Separador
         ctk.CTkFrame(left_frame, height=2, border_width=0, fg_color="gray").pack(fill="x", padx=10, pady=15)
@@ -1010,13 +1018,13 @@ class AppHotelLTS(ctk.CTk):
                 except Exception as e:
                     messagebox.showerror("Erro", str(e))
 
-        ctk.CTkButton(left_frame, text="Remover Funcionário Selecionado", fg_color=self.colors["vermelho"], command=remover_func_action).pack(pady=10)
+        ctk.CTkButton(left_frame, text="Remover Funcionário Selecionado", fg_color=self.colors["perigo"], command=remover_func_action).pack(pady=10)
 
         # --- Conteúdo do Painel Direito ---
         is_dark = ctk.get_appearance_mode() == "Dark"
         cal_bg = "#1f2937" if is_dark else "#ffffff"
         cal_fg = "#f3f4f6" if is_dark else "#1f2937"
-        cal_sel_bg = self.colors["verde"]
+        cal_sel_bg = self.colors["calendario"]
         
         self.calendario = Calendar(right_frame, selectmode='day', date_pattern='dd/mm/yyyy',
                                    background=cal_bg, foreground=cal_fg,
@@ -1071,7 +1079,7 @@ class AppHotelLTS(ctk.CTk):
             event_dt = datetime.strptime(data_iso, '%Y-%m-%d')
             self.calendario.calevent_create(event_dt, nome_func, 'func_agenda')
             
-        self.calendario.tag_config('func_agenda', background=self.colors["verde"], foreground='white')
+        self.calendario.tag_config('func_agenda', background=self.colors["calendario"], foreground='white')
 
     def atualizar_data_selecionada_calendario(self, event):
         if not self.calendario or not self.lbl_data_selecionada: return
@@ -1149,7 +1157,7 @@ class AppHotelLTS(ctk.CTk):
         self.limpar_tela()
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=10)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
-        ctk.CTkLabel(nav, text="CENTRAL FINANCEIRA", font=("Arial", 18, "bold"), text_color=self.colors["verde"]).pack(side="left", padx=20)
+        ctk.CTkLabel(nav, text="CENTRAL FINANCEIRA", font=("Arial", 18, "bold"), text_color=self.colors["financeiro"]).pack(side="left", padx=20)
 
         def acao_exportar():
             dialog = ctk.CTkInputDialog(text="Digite o Mês/Ano (MM/AAAA) para filtrar\nou deixe vazio para exportar TUDO:", title="Exportar Relatório")
@@ -1170,8 +1178,8 @@ class AppHotelLTS(ctk.CTk):
                 except Exception as e: messagebox.showerror("Erro", str(e))
 
         ctk.CTkButton(nav, text="🖨️ Fechamento Dia", width=140, fg_color="#2c3e50", command=acao_fechamento).pack(side="right", padx=5)
-        ctk.CTkButton(nav, text="📥 Exportar Extrato", width=160, fg_color=self.colors["verde"], command=acao_exportar).pack(side="right", padx=5)
-        ctk.CTkButton(nav, text="+ Novo Lançamento", width=160, fg_color=self.colors["dourado"], text_color="black", hover_color=self.colors["dourado_hover"], command=self.janela_novo_lancamento_central).pack(side="right")
+        ctk.CTkButton(nav, text="📥 Exportar Extrato", width=160, fg_color=self.colors["financeiro"], command=acao_exportar).pack(side="right", padx=5)
+        ctk.CTkButton(nav, text="+ Novo Lançamento", width=160, fg_color=self.colors["financeiro"], text_color="white", hover_color=self.colors["financeiro_hover"], command=self.janela_novo_lancamento_central).pack(side="right")
 
         # Sistema de Abas
         tabview = ctk.CTkTabview(self.main_frame)
@@ -1335,7 +1343,7 @@ class AppHotelLTS(ctk.CTk):
 
     def config_admin_view(self) -> None:
         # --- Sistema de Abas para melhor organização ---
-        tabview = ctk.CTkTabview(self.main_frame, segmented_button_selected_color=self.colors["verde"])
+        tabview = ctk.CTkTabview(self.main_frame, segmented_button_selected_color=self.colors["ajustes"])
         tabview.pack(fill="both", expand=True, padx=10, pady=5)
         
         # Inicializa variáveis para evitar erro de referência (unbound variable)
@@ -1361,7 +1369,7 @@ class AppHotelLTS(ctk.CTk):
             ea = ctk.CTkComboBox(f_grid, values=["15", "30", "60", "90"], width=60)
             ea.set(str(self.core.get_config('alerta_dias'))); ea.grid(row=0, column=3, padx=5)
             
-            ctk.CTkButton(tab_sistema, text="Salvar Configurações", height=30, fg_color=self.colors["verde"], command=lambda: [
+            ctk.CTkButton(tab_sistema, text="Salvar Configurações", height=30, fg_color=self.colors["ajustes"], command=lambda: [
                 self.core.set_config('validade_meses', int(ev.get()), self.current_user['username']), 
                 self.core.set_config('alerta_dias', int(ea.get()), self.current_user['username']), 
                 messagebox.showinfo("Sucesso", "Configurações salvas!"),
@@ -1369,7 +1377,7 @@ class AppHotelLTS(ctk.CTk):
             ]).pack(pady=10, padx=20, anchor="w")
 
             f_backup = ctk.CTkFrame(tab_sistema, fg_color="transparent"); f_backup.pack(pady=20, padx=20, anchor="w")
-            ctk.CTkButton(f_backup, text="Fazer Backup do Banco", height=30, fg_color=self.colors["dourado"], command=lambda: [
+            ctk.CTkButton(f_backup, text="Fazer Backup do Banco", height=30, fg_color=self.colors["aviso"], command=lambda: [
                 self.core.fazer_backup(),
                 messagebox.showinfo("Backup", "Backup realizado com sucesso na pasta 'backups'!")
             ]).pack(side="left", padx=5)
@@ -1380,7 +1388,7 @@ class AppHotelLTS(ctk.CTk):
                     if messagebox.askyesno("Confirmar", "Isso substituirá os dados atuais pelos do backup. Continuar?"):
                         try: self.core.restaurar_backup(path, self.current_user['username']); messagebox.showinfo("Sucesso", "Backup restaurado! Reinicie o sistema.")
                         except Exception as e: messagebox.showerror("Erro", str(e))
-            ctk.CTkButton(f_backup, text="Restaurar Backup", height=30, fg_color=self.colors["vermelho"], command=restaurar).pack(side="left", padx=5)
+            ctk.CTkButton(f_backup, text="Restaurar Backup", height=30, fg_color=self.colors["perigo"], command=restaurar).pack(side="left", padx=5)
             
             ctk.CTkButton(f_backup, text="🧹 Otimizar Banco", height=30, fg_color="#2c3e50", command=lambda: [
                 self.core.otimizar_banco(),
@@ -1413,7 +1421,7 @@ class AppHotelLTS(ctk.CTk):
             refresh_users(); eu_user.delete(0, 'end'); eu_pass.delete(0, 'end')
             
         eu_pass.bind("<Return>", save_user)
-        ctk.CTkButton(f_form, text="Salvar/Atualizar", command=save_user, fg_color=self.colors["verde"]).pack(side="left", padx=5)
+        ctk.CTkButton(f_form, text="Salvar/Atualizar", command=save_user, fg_color=self.colors["ajustes"]).pack(side="left", padx=5)
         
         refresh_users()
 
@@ -1423,7 +1431,7 @@ class AppHotelLTS(ctk.CTk):
             u = tv_u.item(sel[0])['values'][0]
             if u == 'gabriel': messagebox.showerror("Erro", "Não é possível excluir o superadmin."); return
             if messagebox.askyesno("Confirmar", f"Excluir {u}?"): self.core.excluir_usuario(u, self.current_user['username']); refresh_users()
-        ctk.CTkButton(tab_usuarios, text="Excluir Selecionado", fg_color=self.colors["vermelho"], command=del_user).pack(pady=10, anchor="e", padx=10)
+        ctk.CTkButton(tab_usuarios, text="Excluir Selecionado", fg_color=self.colors["perigo"], command=del_user).pack(pady=10, anchor="e", padx=10)
 
         # --- ABA 3: CATEGORIAS ---
         if self.current_user['is_admin']:
@@ -1433,7 +1441,7 @@ class AppHotelLTS(ctk.CTk):
             def add_c(event: object | None = None) -> None:
                 self.core.adicionar_categoria(ec_cat.get()); ec_cat.delete(0, 'end'); refresh_c()
             ec_cat.bind("<Return>", add_c)
-            ctk.CTkButton(fc_top, text="+", width=40, command=add_c, fg_color=self.colors["verde"]).pack(side="left")
+            ctk.CTkButton(fc_top, text="+", width=40, command=add_c, fg_color=self.colors["ajustes"]).pack(side="left")
             
             tv_c = ttk.Treeview(tab_categorias, columns=("C",), show="headings")
             tv_c.heading("C", text="Nome"); tv_c.pack(fill="x", padx=10, pady=5)
@@ -1448,7 +1456,7 @@ class AppHotelLTS(ctk.CTk):
 
             def del_c() -> None:
                 if tv_c.selection(): self.core.remover_categoria(tv_c.item(tv_c.selection()[0])['values'][0]); refresh_c()
-            ctk.CTkButton(tab_categorias, text="Remover Selecionada", height=25, fg_color=self.colors["vermelho"], command=del_c).pack(pady=5, anchor="e", padx=10)
+            ctk.CTkButton(tab_categorias, text="Remover Selecionada", height=25, fg_color=self.colors["perigo"], command=del_c).pack(pady=5, anchor="e", padx=10)
 
         # --- ABA PRODUTOS (NOVA) ---
         if self.current_user['is_admin'] or self.current_user.get('can_manage_products'):
@@ -1458,7 +1466,7 @@ class AppHotelLTS(ctk.CTk):
             def add_p(event: object | None = None) -> None:
                 self.core.adicionar_produto_predefinido(ep_prod.get()); ep_prod.delete(0, 'end'); refresh_p()
             ep_prod.bind("<Return>", add_p)
-            ctk.CTkButton(fp_top, text="+ Adicionar", width=100, command=add_p, fg_color=self.colors["verde"]).pack(side="left")
+            ctk.CTkButton(fp_top, text="+ Adicionar", width=100, command=add_p, fg_color=self.colors["ajustes"]).pack(side="left")
             
             tv_p = ttk.Treeview(tab_produtos, columns=("P",), show="headings")
             tv_p.heading("P", text="Produto"); tv_p.pack(fill="both", expand=True, padx=10, pady=5)
@@ -1473,7 +1481,7 @@ class AppHotelLTS(ctk.CTk):
 
             def del_p() -> None:
                 if tv_p.selection(): self.core.remover_produto_predefinido(tv_p.item(tv_p.selection()[0])['values'][0]); refresh_p()
-            ctk.CTkButton(tab_produtos, text="Remover Selecionado", height=25, fg_color=self.colors["vermelho"], command=del_p).pack(pady=5, anchor="e", padx=10)
+            ctk.CTkButton(tab_produtos, text="Remover Selecionado", height=25, fg_color=self.colors["perigo"], command=del_p).pack(pady=5, anchor="e", padx=10)
 
         # --- ABA 4: AUDITORIA ---
         if self.current_user['is_admin']:
@@ -1511,7 +1519,7 @@ class AppHotelLTS(ctk.CTk):
             ep.delete(0, 'end'); epc.delete(0, 'end')
             
         epc.bind("<Return>", save_pass)
-        ctk.CTkButton(f, text="Atualizar Senha", command=save_pass, fg_color=self.colors["verde"]).pack(pady=20)
+        ctk.CTkButton(f, text="Atualizar Senha", command=save_pass, fg_color=self.colors["ajustes"]).pack(pady=20)
 
     # =========================================================================
     # 9. JANELAS DE DIÁLOGO (POPUPS & TOPLEVELS)
@@ -1580,8 +1588,8 @@ class AppHotelLTS(ctk.CTk):
         tipo_var = ctk.StringVar(value="ENTRADA")
         f_tipo = ctk.CTkFrame(f_detalhes, fg_color="transparent"); f_tipo.pack(pady=5)
         
-        opcoes_radio = [("Crédito", "ENTRADA", self.colors["verde"], 0, 0), ("Uso (Baixa)", "SAIDA", self.colors["vermelho"], 0, 1),
-                        ("Multa", "MULTA", self.colors["dourado"], 1, 0), ("Pgto Multa", "PAGAMENTO_MULTA", self.colors["verde_hover"], 1, 1)]
+        opcoes_radio = [("Crédito", "ENTRADA", self.colors["sucesso"], 0, 0), ("Uso (Baixa)", "SAIDA", self.colors["perigo"], 0, 1),
+                        ("Multa", "MULTA", self.colors["aviso"], 1, 0), ("Pgto Multa", "PAGAMENTO_MULTA", self.colors["sucesso_hover"], 1, 1)]
         
         for txt, val, col, r, c in opcoes_radio:
             ctk.CTkRadioButton(f_tipo, text=txt, variable=tipo_var, value=val, fg_color=col, command=atualizar_opcoes_categoria).grid(row=r, column=c, padx=5, pady=5)
@@ -1603,7 +1611,7 @@ class AppHotelLTS(ctk.CTk):
             except Exception as e: messagebox.showerror("Erro", str(e))
         
         e_valor.bind("<Return>", confirmar)
-        ctk.CTkButton(f_detalhes, text="CONFIRMAR LANÇAMENTO", fg_color=self.colors["verde"], height=40, command=confirmar).pack(pady=10, fill="x", padx=20)
+        ctk.CTkButton(f_detalhes, text="CONFIRMAR LANÇAMENTO", fg_color=self.colors["financeiro"], height=40, command=confirmar).pack(pady=10, fill="x", padx=20)
 
     def janela_calendario_vencimento(self, event: object, doc: str, nome: str) -> None:
         # Verificação de permissão melhorada: permite se for admin ou tiver a permissão específica
@@ -1686,7 +1694,7 @@ class AppHotelLTS(ctk.CTk):
         ed.bind("<Return>", salvar)
         etel.bind("<Return>", salvar)
         eemail.bind("<Return>", salvar)
-        ctk.CTkButton(jan, text="Salvar", fg_color=self.colors["verde"], width=300, command=salvar).pack(pady=20)
+        ctk.CTkButton(jan, text="Salvar", fg_color=self.colors["hospedes"], width=300, command=salvar).pack(pady=20)
 
     def _janela_movimentacao(self, title: str, doc: str, nome: str, tipo_mov: str, callback: callable) -> None:
         jan = ctk.CTkToplevel(self); jan.title(title); jan.geometry("350x350")
@@ -1716,7 +1724,7 @@ class AppHotelLTS(ctk.CTk):
                 messagebox.showerror("Erro", str(e), parent=jan)
 
         ev.bind("<Return>", salvar)
-        ctk.CTkButton(jan, text="Confirmar", command=salvar, fg_color=self.colors["verde"]).pack(pady=10)
+        ctk.CTkButton(jan, text="Confirmar", command=salvar, fg_color=self.colors["sucesso"]).pack(pady=10)
 
     def janela_add_credito(self, doc: str, nome: str) -> None:
         def cb(d, v, c, o, u): self.core.adicionar_movimentacao(d, v, c, "ENTRADA", o, u)
