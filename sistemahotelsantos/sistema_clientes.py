@@ -1065,6 +1065,15 @@ class SistemaCreditos:
         self.cursor.execute("SELECT * FROM logs_auditoria ORDER BY id DESC LIMIT 100")
         return self.cursor.fetchall()
 
+    def limpar_logs_auditoria(self, usuario_acao: str = "Sistema") -> None:
+        """
+        Remove todos os registros da tabela de logs de auditoria.
+        Mantém apenas o registro desta própria ação de limpeza.
+        """
+        with self.conn:
+            self.cursor.execute("DELETE FROM logs_auditoria")
+        self.registrar_log(usuario_acao, "LIMPEZA_LOGS", "Histórico de auditoria apagado completamente.")
+
 if __name__ == "__main__":
     if len(sys.argv) > 3 and sys.argv[1] == "reset_user":
         # Uso: python sistema_clientes.py reset_user <usuario> <nova_senha>
