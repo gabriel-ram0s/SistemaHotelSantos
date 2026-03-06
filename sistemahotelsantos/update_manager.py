@@ -1,6 +1,6 @@
 """
 Módulo de Auto-Atualização
-Verifica novas versões no GitHub e permite atualizar o aplicativo
+Carrega versão do GitHub
 """
 
 import sys
@@ -14,17 +14,58 @@ import threading
 import requests
 from tkinter import messagebox
 from typing import Optional, Tuple, Callable
+
+
 class UpdateManager:
     """Gerencia atualizações do aplicativo"""
     
-    # Configuração - ALTERE CONFORME SEU REPOSITÓRIO
     GITHUB_REPO = "gabriel-ram0s/sistemahotelsantos"
     GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     
     def __init__(self):
-        self.versao_atual = "5.0.1"  # Versão do aplicativo (Sincronizada)
+        self.versao_atual = self._obter_versao()
         self.arquivo_versao = Path.home() / ".shs_version"
         self.carregar_versao()
+    
+    def _obter_versao(self) -> str:
+        """
+        Obtém versão da tag do git ou do arquivo de configuração.
+        Ordem de busca:
+        1. Variável de ambiente BUILD_VERSION (definida no GitHub Actions)
+        2. Tag git local
+        3. Arquivo .shs_version
+        4. Padrão: 0.0.0
+        """
+        # 1. Variável de ambiente (usada em builds via GitHub Actions)
+        version = os.getenv('BUILD_VERSION')
+        if version:
+            return version
+        
+        # 2. Tag git mais recente
+        try:
+            result = subprocess.run(
+                ['git', 'describe', '--tags', '--abbrev=0'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return result.stdout.strip().lstrip('v')
+        except:
+            pass
+        
+        # 3. Arquivo local
+        arquivo = Path.home() / ".shs_version"
+        if arquivo.exists():
+            try:
+                with open(arquivo, 'r') as f:
+                    data = json.load(f)
+                    return data.get('versao', '0.0.0')
+            except:
+                pass
+        
+        # 4. Padrão
+        return "0.0.0"
     
     def carregar_versao(self):
         """Carrega versão salva ou usa padrão"""
@@ -32,7 +73,7 @@ class UpdateManager:
             if self.arquivo_versao.exists():
                 with open(self.arquivo_versao, 'r') as f:
                     data = json.load(f)
-                    self.versao_atual = data.get('versao', '5.0.1') # Reativa a leitura, mantendo 5.0.1 como padrão
+                    self.versao_atual = data.get('versao', self.versao_atual)
         except Exception as e:
             print(f"⚠️ Erro ao carregar versão: {e}")
     
@@ -48,18 +89,11 @@ class UpdateManager:
             print(f"⚠️ Erro ao salvar versão: {e}")
     
     def comparar_versoes(self, v1, v2):
-        """
-        Compara duas versões (v1.v2.v3)
-        Retorna:
-          -1 se v1 < v2
-           0 se v1 == v2
-           1 se v1 > v2
-        """
+        """Compara duas versões (v1.v2.v3)"""
         try:
             v1_parts = [int(x) for x in v1.split('.')]
             v2_parts = [int(x) for x in v2.split('.')]
             
-            # Padronizar tamanho
             while len(v1_parts) < len(v2_parts):
                 v1_parts.append(0)
             while len(v2_parts) < len(v1_parts):
@@ -75,15 +109,11 @@ class UpdateManager:
             return 0
     
     def verificar_atualizacao(self) -> Tuple[bool, Optional[str], Optional[str]]:
-        """
-        Verifica se há nova versão disponível de forma síncrona.
-        Retorna: (tem_atualizacao, versao_nova, url_download)
-        Lança uma exceção em caso de erro de rede.
-        """
+        """Verifica se há nova versão disponível"""
         try:
             print(f"🔍 Verificando atualizações...")
             response = requests.get(self.GITHUB_API, timeout=10)
-            response.raise_for_status() # Lança exceção para status 4xx/5xx
+            response.raise_for_status()
             
             data = response.json()
             versao_nova = data['tag_name'].lstrip('v')
@@ -94,10 +124,8 @@ class UpdateManager:
             comparacao = self.comparar_versoes(self.versao_atual, versao_nova)
             
             if comparacao < 0:
-                # Encontrou versão mais nova
                 print(f"✅ Nova versão disponível: {versao_nova}")
                 
-                # Procurar asset correto
                 assets = data.get('assets', [])
                 url_download = None
                 
@@ -111,7 +139,6 @@ class UpdateManager:
                     print(f"📥 Download disponível: {url_download}")
                     return True, versao_nova, url_download
                 else:
-                    # Isso não deve ser um erro fatal, apenas informa que não há build para o SO
                     print(f"⚠️ Nova versão {versao_nova} encontrada, mas sem build para {os_identifier}.")
                     return False, None, None
             else:
@@ -119,32 +146,27 @@ class UpdateManager:
                 return False, None, None
                     
         except requests.exceptions.Timeout:
-            raise Exception("Tempo esgotado ao verificar atualizações. Verifique sua conexão com a internet.")
+            raise Exception("Tempo esgotado ao verificar atualizações.")
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Erro de rede ao verificar atualizações: {e}")
+            raise Exception(f"Erro de rede: {e}")
         except Exception as e:
-            # Captura outros erros (JSON inválido, etc) e os relança para a GUI
-            print(f"❌ Erro inesperado ao verificar: {e}")
+            print(f"❌ Erro: {e}")
             raise e
     
-    def aplicar_atualizacao(self, url_download: str, versao_nova: str, progress_callback: Optional[Callable] = None) -> None:
-        """
-        Baixa o novo executável, cria um script para substituí-lo e reinicia o app.
-        """
+    def aplicar_atualizacao(self, url_download: str, versao_nova: str, 
+                           progress_callback: Optional[Callable] = None) -> None:
+        """Baixa e aplica atualização"""
         def _task():
             try:
                 is_windows = platform.system() == 'Windows'
-                
-                # Garante que estamos trabalhando com caminhos absolutos
                 exec_path = os.path.abspath(sys.executable)
                 exec_dir = os.path.dirname(exec_path)
                 exec_name = os.path.basename(exec_path)
         
-                # Define nomes para o arquivo temporário e o script de atualização
                 temp_suffix = ".exe" if is_windows else ""
                 temp_path = os.path.join(exec_dir, f"update_temp{temp_suffix}")
                 
-                # 1. Baixar o novo arquivo
+                # Baixar
                 r = requests.get(url_download, stream=True, timeout=30)
                 r.raise_for_status()
                 
@@ -159,7 +181,7 @@ class UpdateManager:
                             progress = downloaded_size / total_size
                             progress_callback(progress, None)
             
-                # 2. Criar script de atualização e executar
+                # Criar script de atualização
                 if is_windows:
                     updater_path = os.path.join(exec_dir, "updater.bat")
                     bat_script = f"""
@@ -180,9 +202,11 @@ class UpdateManager:
                     with open(updater_path, "w", encoding="utf-8") as bat:
                         bat.write(bat_script)
                     
-                    if progress_callback: progress_callback(1.0, "finalizando")
-                    subprocess.Popen(updater_path, shell=True, cwd=exec_dir, creationflags=subprocess.DETACHED_PROCESS)
-                else: # Linux/Unix
+                    if progress_callback: 
+                        progress_callback(1.0, "finalizando")
+                    subprocess.Popen(updater_path, shell=True, cwd=exec_dir, 
+                                   creationflags=subprocess.DETACHED_PROCESS)
+                else:
                     updater_path = os.path.join(exec_dir, "updater.sh")
                     os.chmod(temp_path, 0o755)
                     
@@ -198,8 +222,10 @@ class UpdateManager:
                         sh.write(sh_script)
                     os.chmod(updater_path, 0o755)
                     
-                    if progress_callback: progress_callback(1.0, "finalizando")
-                    subprocess.Popen(["/bin/bash", updater_path], cwd=exec_dir, start_new_session=True)
+                    if progress_callback: 
+                        progress_callback(1.0, "finalizando")
+                    subprocess.Popen(["/bin/bash", updater_path], cwd=exec_dir, 
+                                   start_new_session=True)
 
                 self.salvar_versao(versao_nova)
                 os._exit(0)
