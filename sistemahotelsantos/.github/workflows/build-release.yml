@@ -54,7 +54,7 @@ jobs:
           --add-data="app.ico${{ matrix.sep }}." \
           --hidden-import="babel.numbers" \
           --hidden-import="PIL.ImageTk" \
-          --hidden-import="fpdf.fpdf" \
+          --hidden-import="fpdf" \
           app_gui.py
  
       - name: Rename Binary for Release
