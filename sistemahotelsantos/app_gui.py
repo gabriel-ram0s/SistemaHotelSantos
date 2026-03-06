@@ -10,6 +10,7 @@ from urllib.parse import quote
 import threading
 import traceback
 
+from update_manager import verificar_atualizacao_ao_iniciar
 try:
     from tkcalendar import Calendar
 except ImportError:
@@ -144,6 +145,9 @@ class AppHotelLTS(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=15)
         self.main_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
         self.tela_login()
+
+        # Verificar atualizações ao iniciar
+        self.after(2000, lambda: verificar_atualizacao_ao_iniciar(self))
 
     # =========================================================================
     # 1. SETUP & CORE (Estilos, Configurações Globais)

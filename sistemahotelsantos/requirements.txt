@@ -8,6 +8,9 @@ fpdf2==2.7.0
 # Requisições HTTP
 requests==2.31.0
 
+# Gráficos e Visualização
+matplotlib==3.8.0
+
 # Testes
 pytest==7.4.3
 pytest-cov==4.1.0

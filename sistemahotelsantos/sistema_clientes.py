@@ -20,6 +20,9 @@ try:
 except ImportError:
     FPDF = None
 
+
+
+
 class SistemaCreditos:
     def __init__(self, db_name: str = "hotel.db"):
         # --- CORREÇÃO DE DIRETÓRIO (APPDATA) ---

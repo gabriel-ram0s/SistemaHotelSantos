@@ -1,15 +1,15 @@
 #!/bin/bash
 # =========================================================================
-# install_dependencies_ubuntu.sh
-# Script para Ubuntu que resolve o erro PEP 668 automaticamente
-# Basta rodar: bash install_dependencies_ubuntu.sh
+# install_dependencies.sh
+# Script para instalar todas as dependências automaticamente
+# Basta rodar: bash install_dependencies.sh
 # =========================================================================
 
 clear
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"
-echo "║   Instalando Dependências (Ubuntu) - PEP 668 Resolvido ║"
+echo "║   Instalando Dependências do Projeto...                ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -39,25 +39,25 @@ fi
 echo ""
 echo "✅ Ambiente Virtual ativado!"
 echo ""
-echo "📦 Instalando dependências (com --break-system-packages)..."
+echo "📦 Instalando dependências..."
 echo ""
 
 # Atualizar pip (importante!)
 echo "1/2: Atualizando pip..."
-pip install --break-system-packages --upgrade pip
+python -m pip install --upgrade pip
 
-# Instalar todas as dependências com o flag necessário
+# Instalar todas as dependências
 echo ""
-echo "2/2: Instalando bibliotecas (Ubuntu PEP 668)..."
-pip install --break-system-packages customtkinter tkcalendar fpdf2 requests pytest pytest-cov
-pip install --break-system-packages customtkinter tkcalendar fpdf2 requests pytest pytest-cov matplotlib
+echo "2/2: Instalando bibliotecas..."
+pip install customtkinter tkcalendar fpdf2 requests pytest pytest-cov
 
 if [ $? -ne 0 ]; then
     echo ""
     echo "❌ Erro durante instalação!"
     echo ""
-    echo "💡 Tente manualmente:"
-    echo "   pip install --break-system-packages -r requirements.txt"
+    echo "💡 Tente:"
+    echo "   python -m pip install --upgrade pip"
+    echo "   pip install customtkinter"
     echo ""
     read -p "Pressione ENTER para sair..."
     exit 1
