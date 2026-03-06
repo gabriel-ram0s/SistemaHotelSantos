@@ -105,18 +105,18 @@ class AppHotelLTS(ctk.CTk):
             "aviso": "#d97706",         # Amber 600
             
             # Cores Singulares por Módulo
-            "hospedes": "#0d9488",       # Teal 600 (Fosco)
-            "hospedes_hover": "#0f766e", # Teal 700
-            "financeiro": "#15803d",     # Green 700 (Fosco/Dinheiro)
-            "financeiro_hover": "#14532d",
-            "compras": "#ea580c",        # Orange 600 (Fosco)
-            "compras_hover": "#c2410c",
-            "calendario": "#4f46e5",     # Indigo 600 (Fosco)
-            "calendario_hover": "#4338ca",
-            "dashboard": "#2563eb",      # Blue 600 (Fosco)
-            "dashboard_hover": "#1d4ed8",
-            "ajustes": "#475569",        # Slate 600 (Neutro)
-            "ajustes_hover": "#334155",
+            "hospedes": "#7c3aed",       # Violet 600 (Roxo Vibrante)
+            "hospedes_hover": "#6d28d9", # Violet 700
+            "financeiro": "#16a34a",     # Green 600 (Verde Vibrante)
+            "financeiro_hover": "#15803d", # Green 700
+            "compras": "#ea580c",        # Orange 600 (Laranja Vibrante)
+            "compras_hover": "#c2410c",  # Orange 700
+            "calendario": "#db2777",     # Pink 600 (Rosa Vibrante)
+            "calendario_hover": "#be185d", # Pink 700
+            "dashboard": "#2563eb",      # Blue 600 (Azul Vibrante)
+            "dashboard_hover": "#1d4ed8", # Blue 700
+            "ajustes": "#0d9488",        # Teal 600 (Turquesa Vibrante)
+            "ajustes_hover": "#0f766e",  # Teal 700
             
             # UI Base
             "branco": "#f8fafc",        # Slate 50
@@ -384,6 +384,8 @@ class AppHotelLTS(ctk.CTk):
         btns = [("👥 HÓSPEDES", self.tela_hospedes, (self.colors["hospedes"], self.colors["hospedes_hover"])),
                 ("💰 FINANCEIRO", self.tela_financeiro, (self.colors["financeiro"], self.colors["financeiro_hover"])),
                 ("🛒 COMPRAS", self.tela_compras, (self.colors["compras"], self.colors["compras_hover"])),
+                ("📅 CALENDÁRIO", self.tela_calendario, (self.colors["calendario"], self.colors["calendario_hover"])),
+                ("📊 DASHBOARD", self.tela_dash, (self.colors["dashboard"], self.colors["dashboard_hover"])),
                 ("⚙️ AJUSTES", self.tela_config, (self.colors["ajustes"], self.colors["ajustes_hover"]))]
 
         for i, (t, c, col) in enumerate(btns):
