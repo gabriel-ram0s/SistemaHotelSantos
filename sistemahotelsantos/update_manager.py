@@ -32,8 +32,7 @@ class UpdateManager:
             if self.arquivo_versao.exists():
                 with open(self.arquivo_versao, 'r') as f:
                     data = json.load(f)
-                    # self.versao_atual = data.get('versao', '4.9.4') # Comentado para forçar versão do código
-                    pass
+                    self.versao_atual = data.get('versao', '5.0') # Reativa a leitura, mantendo 5.0 como padrão
         except Exception as e:
             print(f"⚠️ Erro ao carregar versão: {e}")
     
