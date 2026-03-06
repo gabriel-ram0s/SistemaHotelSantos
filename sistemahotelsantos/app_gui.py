@@ -93,14 +93,14 @@ class AppHotelLTS(ctk.CTk):
         except: pass
 
         self.colors = {
-            "verde": "#10b981",       # Emerald 500
-            "verde_hover": "#059669", # Emerald 600
+            "verde": "#3b82f6",       # Blue 500 (Alterado para teste GitHub)
+            "verde_hover": "#2563eb", # Blue 600
             "dourado": "#f59e0b",     # Amber 500
             "dourado_hover": "#d97706", # Amber 600
             "vermelho": "#ef4444",    # Red 500
             "vermelho_hover": "#dc2626", # Red 600
             "branco": "#f8fafc",      # Slate 50
-            "sidebar_bg": "#1e293b",  # Slate 800 (Azul acinzentado escuro)
+            "sidebar_bg": "#0f172a",  # Slate 900 (Mais escuro)
             "sidebar_txt": "#e2e8f0"  # Slate 200
         }
         self.setup_custom_styles()
