@@ -3,8 +3,10 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'      # Dispara para qualquer tag que comece com 'v' (ex: v5.0, v5.0.1)
-      - '[0-9]*'  # Dispara para qualquer tag que comece com um número (ex: 5.0, 5.0.1)
+      - 'v*.*.*'  # Ex: v1.2.3
+      - 'v*.*'    # Ex: v1.2
+      - '*.*.*'   # Ex: 4.9.4
+      - '*.*'     # Ex: 5.0
   workflow_dispatch:
 
 permissions:
@@ -39,11 +41,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
-          # Instala as dependências do seu projeto a partir do requirements.txt
+          pip install pyinstaller # PyInstaller é uma dependência do build, não do app
           pip install -r sistemahotelsantos/requirements.txt
-          # Instala babel explicitamente, uma dependência oculta comum do tkcalendar
-          pip install babel
 
       - name: Build with PyInstaller
         # O comando é unificado para Windows e Linux, usando a variável de separador de path
