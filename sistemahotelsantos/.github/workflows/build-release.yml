@@ -3,14 +3,14 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*.*.*' # Ex: v1.2.3
-      - 'v*.*' # Ex: v1.2
-      - '*.*.*' # Ex: 4.9.4
-      - '*.*' # Ex: 5.0
+      - 'v*.*.*'
+      - 'v*.*'
+      - '*.*.*'
+      - '*.*'
   workflow_dispatch:
 
 permissions:
-  contents: write # Necessário para a action softprops/action-gh-release criar a release
+  contents: write
 
 jobs:
   build:
@@ -30,7 +30,8 @@ jobs:
             sep: ':'
  
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
  
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -42,10 +43,10 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller # PyInstaller é uma dependência do build, não do app
+          pip install pyinstaller
           pip install -r sistemahotelsantos/requirements.txt
  
-      - name: Build with PyInstaller
+      - name: Build executable with PyInstaller
         working-directory: ./sistemahotelsantos
         shell: bash
         run: |
@@ -57,32 +58,33 @@ jobs:
           --hidden-import="fpdf" \
           app_gui.py
  
-      - name: Rename Binary for Release
+      - name: Rename binary for release
         working-directory: ./sistemahotelsantos
         shell: bash
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name_release }}
  
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name_release }}
           path: sistemahotelsantos/dist/${{ matrix.asset_name_release }}
 
   release:
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
  
     steps:
-      - name: Download all artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
  
-      - name: Create Release and Upload Assets
+      - name: Create Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*/*
           draft: false
           prerelease: false
-          generate_release_notes: true # Gera o changelog automaticamente a partir dos commits
+          generate_release_notes: true
