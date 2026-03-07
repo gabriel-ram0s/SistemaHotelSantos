@@ -87,12 +87,8 @@ class SistemaCreditos:
                                     obs TEXT)''')
             self.cursor.execute('CREATE TABLE IF NOT EXISTS produtos (nome TEXT PRIMARY KEY)')
             self.cursor.execute('CREATE TABLE IF NOT EXISTS funcionarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT UNIQUE NOT NULL)')
-            self.cursor.execute('''CREATE TABLE IF NOT EXISTS agenda (
-                                    data TEXT PRIMARY KEY, 
-                                    funcionario_id INTEGER, 
-                                    obs TEXT, 
-                                    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)
-                                )''')
+            # A tabela agenda é criada/migrada abaixo para suportar multiplas tarefas
+            
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('validade_meses', 6))
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('alerta_dias', 30))
             self.cursor.execute("INSERT OR IGNORE INTO configs VALUES (?, ?)", ('tema', 0)) # 0=Light, 1=Dark
@@ -135,6 +131,23 @@ class SistemaCreditos:
             try:
                 self.cursor.execute("ALTER TABLE compras ADD COLUMN lista_id INTEGER")
             except sqlite3.OperationalError: pass
+            
+            # MIGRATION: Agenda (Transformar PK data em ID para permitir multiplas tarefas)
+            # Verifica se a tabela agenda existe e se tem a coluna ID
+            try:
+                self.cursor.execute("SELECT id FROM agenda LIMIT 1")
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Se der erro, ou não existe ou é a versão antiga. Recria.
+                self.cursor.execute("DROP TABLE IF EXISTS agenda")
+                self.cursor.execute('''CREATE TABLE agenda (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        data TEXT, 
+                                        funcionario_id INTEGER, 
+                                        obs TEXT, 
+                                        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)
+                                    )''')
+                self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_agenda_data ON agenda(data)")
+
 
             # MIGRATION: Agrupa compras antigas (sem lista) em uma lista legado
             self.cursor.execute("SELECT 1 FROM compras WHERE lista_id IS NULL LIMIT 1")
@@ -411,7 +424,7 @@ class SistemaCreditos:
         return sorted(devedores, key=lambda x: x[3], reverse=True) # Ordena por maior dívida
 
     def get_historico_detalhado(self, doc: str) -> List[Dict[str, Any]]:
-        self.cursor.execute("SELECT tipo, valor, data_acao, categoria, obs, usuario FROM historico_zebra WHERE documento = ? ORDER BY id DESC", (doc,))
+        self.cursor.execute("SELECT id, tipo, valor, data_acao, categoria, obs, usuario FROM historico_zebra WHERE documento = ? ORDER BY id DESC", (doc,))
         return [dict(r) for r in self.cursor.fetchall()]
 
     def get_historico_global(self, filtro: str = "", limite: int = 100, tipos: Optional[Tuple[str, ...]] = None) -> List[Dict[str, Any]]:
@@ -459,13 +472,12 @@ class SistemaCreditos:
             self.cursor.execute("DELETE FROM historico_zebra WHERE id = ?", (id_mov,))
         self.registrar_log(usuario_acao, "EXCLUIR_MOVIMENTACAO", f"ID: {id_mov} | Doc: {mov['documento']} | Valor: {mov['valor']} | Tipo: {mov['tipo']}")
 
-    def atualizar_data_vencimento_manual(self, doc: str, data_br: str, valor: Any, data_mov: str, usuario_acao: str = "Sistema") -> None:
+    def atualizar_data_vencimento_manual(self, id_mov: int, data_br: str, usuario_acao: str = "Sistema") -> None:
         d_iso = datetime.strptime(data_br, "%d/%m/%Y").strftime("%Y-%m-%d")
-        dm_iso = datetime.strptime(data_mov, "%d/%m/%Y").strftime("%Y-%m-%d")
         with self.conn:
-            self.cursor.execute("UPDATE historico_zebra SET data_vencimento = ? WHERE documento = ? AND valor = ? AND data_acao = ? AND tipo = 'ENTRADA'", 
-                               (d_iso, doc, valor, dm_iso))
-        self.registrar_log(usuario_acao, "ALTERAR_VENCIMENTO", f"Doc: {doc} | Valor: {valor} | Nova Data: {data_br}")
+            self.cursor.execute("UPDATE historico_zebra SET data_vencimento = ? WHERE id = ?", 
+                               (d_iso, id_mov))
+        self.registrar_log(usuario_acao, "ALTERAR_VENCIMENTO", f"ID Mov: {id_mov} | Nova Data: {data_br}")
 
     # =========================================================================
     # 5. RELATÓRIOS & DASHBOARD
@@ -883,7 +895,7 @@ class SistemaCreditos:
         self.registrar_log(usuario_acao, "DEL_FUNCIONARIO", f"ID: {funcionario_id}")
 
     def get_agenda_mes(self, ano: int, mes: int) -> Dict[str, str]:
-        """Retorna um dicionário de {data_iso: nome_funcionario} para o mês/ano."""
+        """Retorna um dicionário de {data_iso: 'Func1, Func2...'} para o mês/ano (visualização calendário)."""
         like_str = f"{ano}-{mes:02d}-%"
         query = """
             SELECT a.data, f.nome 
@@ -892,28 +904,37 @@ class SistemaCreditos:
             WHERE a.data LIKE ?
         """
         self.cursor.execute(query, (like_str,))
-        return {row['data']: row['nome'] for row in self.cursor.fetchall()}
+        # Agrupa nomes por data
+        eventos = {}
+        for row in self.cursor.fetchall():
+            dt = row['data']
+            nm = row['nome']
+            if dt in eventos:
+                eventos[dt] += f", {nm}"
+            else:
+                eventos[dt] = nm
+        return eventos
 
-    def get_agendamento_dia(self, data_iso: str) -> Optional[Dict[str, Any]]:
+    def get_tarefas_dia(self, data_iso: str) -> List[Dict[str, Any]]:
+        """Retorna lista de tarefas detalhadas para um dia específico."""
         query = """
-            SELECT a.data, a.funcionario_id, a.obs, f.nome 
+            SELECT a.id, a.data, a.funcionario_id, a.obs, f.nome 
             FROM agenda a
             JOIN funcionarios f ON a.funcionario_id = f.id
             WHERE a.data = ?
         """
         self.cursor.execute(query, (data_iso,))
-        row = self.cursor.fetchone()
-        return dict(row) if row else None
+        return [dict(r) for r in self.cursor.fetchall()]
 
     def salvar_agendamento(self, data_iso: str, funcionario_id: int, obs: str = "", usuario_acao: str = "Sistema") -> None:
         with self.conn:
-            self.cursor.execute("INSERT OR REPLACE INTO agenda (data, funcionario_id, obs) VALUES (?, ?, ?)", (data_iso, funcionario_id, obs))
+            self.cursor.execute("INSERT INTO agenda (data, funcionario_id, obs) VALUES (?, ?, ?)", (data_iso, funcionario_id, obs))
         self.registrar_log(usuario_acao, "SAVE_AGENDAMENTO", f"Data: {data_iso}, FuncID: {funcionario_id}, Obs: {obs}")
 
-    def remover_agendamento(self, data_iso: str, usuario_acao: str = "Sistema") -> None:
+    def remover_agendamento_id(self, agenda_id: int, usuario_acao: str = "Sistema") -> None:
         with self.conn:
-            self.cursor.execute("DELETE FROM agenda WHERE data = ?", (data_iso,))
-        self.registrar_log(usuario_acao, "DEL_AGENDAMENTO", f"Data: {data_iso}")
+            self.cursor.execute("DELETE FROM agenda WHERE id = ?", (agenda_id,))
+        self.registrar_log(usuario_acao, "DEL_AGENDAMENTO", f"ID: {agenda_id}")
 
     def get_dados_dash(self) -> Tuple[float, float, float, int]:
         self.cursor.execute("SELECT documento FROM hospedes")
@@ -921,6 +942,12 @@ class SistemaCreditos:
         ts, tv, tav = 0, 0, 0
         hoje = datetime.now().strftime("%Y-%m-%d")
         alerta = (datetime.now() + timedelta(days=self.get_config('alerta_dias'))).strftime("%Y-%m-%d")
+        
+        # Calcula multas totais
+        self.cursor.execute("SELECT SUM(valor) FROM historico_zebra WHERE tipo='MULTA'")
+        res_m = self.cursor.fetchone()
+        total_multas = res_m[0] if res_m and res_m[0] else 0.0
+        
         for d in docs:
             s, v, b = self._processar_saldo(d)
             if s > 0:
@@ -929,7 +956,7 @@ class SistemaCreditos:
                     v_iso = datetime.strptime(v, "%d/%m/%Y").strftime("%Y-%m-%d")
                     if b: tv += s
                     elif hoje <= v_iso <= alerta: tav += s
-        return ts, tv, tav, len(docs)
+        return ts, tv, tav, len(docs), total_multas
 
     def get_dados_grafico_categorias(self) -> List[Tuple[str, float]]:
         self.cursor.execute("SELECT categoria, SUM(valor) as total FROM historico_zebra WHERE tipo='ENTRADA' GROUP BY categoria")

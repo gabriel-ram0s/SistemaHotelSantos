@@ -75,7 +75,7 @@ class AppHotelLTS(ctk.CTk):
         self.calendario: Calendar | None = None
         self.combo_funcionarios: ctk.CTkComboBox | None = None
         self.e_obs_agenda: ctk.CTkEntry | None = None
-        self.tree_funcionarios: ttk.Treeview | None = None
+        self.tree_tarefas_dia: ttk.Treeview | None = None
         self.lbl_data_selecionada: ctk.CTkLabel | None = None
         self.funcionarios_cache: list[dict] = []
         # --- Fim da Declaração ---
@@ -485,8 +485,11 @@ class AppHotelLTS(ctk.CTk):
         ctk.CTkButton(form, text="Lançar Multa", fg_color=self.colors["aviso"], text_color="white", command=lambda: self.janela_add_multa(doc, nome)).pack(side="left", padx=5)
         ctk.CTkButton(form, text="Pagar Multa", fg_color="#27ae60", command=lambda: self.janela_pagar_multa(doc, nome)).pack(side="left", padx=5)
 
-        self.tree_z = ttk.Treeview(f_esq, columns=("T", "V", "D", "C", "U"), show='headings', height=10)
-        for c, t in [("T","Tipo"),("V","Valor"),("D","Data"),("C","Categoria"), ("U", "Resp.")]: self.tree_z.heading(c, text=t); self.tree_z.column(c, anchor="center")
+        # Adicionada coluna ID (invisível ou primeira) para permitir edição correta
+        self.tree_z = ttk.Treeview(f_esq, columns=("ID", "T", "V", "D", "C", "U"), show='headings', height=10)
+        self.tree_z.heading("ID", text="#"); self.tree_z.column("ID", width=40, anchor="center")
+        for c, t in [("T","Tipo"),("V","Valor"),("D","Data"),("C","Categoria"), ("U", "Resp.")]: 
+            self.tree_z.heading(c, text=t); self.tree_z.column(c, anchor="center")
         self.tree_z.pack(expand=True, fill="both")
         self.configurar_tags_tabela(self.tree_z)
         
@@ -503,7 +506,7 @@ class AppHotelLTS(ctk.CTk):
             if m['tipo'] == 'MULTA': tags.append('multa')
             if m['tipo'] == 'PAGAMENTO_MULTA': tags.append('pagamento_multa')
 
-            self.tree_z.insert("", "end", values=(m['tipo'], f"{m['valor']:.2f}", data_br, m['categoria'], user_resp), tags=tags)
+            self.tree_z.insert("", "end", values=(m['id'], m['tipo'], f"{m['valor']:.2f}", data_br, m['categoria'], user_resp), tags=tags)
 
         f_dir = ctk.CTkFrame(self.main_frame, fg_color="transparent"); f_dir.grid(row=0, column=1, sticky="nsew", padx=10)
         s, v, b = self.core.get_saldo_info(doc)
@@ -617,7 +620,7 @@ class AppHotelLTS(ctk.CTk):
         self.current_screen_args = ()
         self.current_screen_kwargs = {}
         self.limpar_tela()
-        t, v, av, q = self.core.get_dados_dash()
+        t, v, av, q, total_multas = self.core.get_dados_dash()
         dias_config = self.core.get_config('alerta_dias')
         nav = ctk.CTkFrame(self.main_frame, fg_color="transparent"); nav.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(nav, text="← Início", width=80, command=self.tela_home).pack(side="left")
@@ -634,7 +637,8 @@ class AppHotelLTS(ctk.CTk):
             ("Saldo Total Geral", f"R$ {t:.2f}", self.colors["sucesso"]), 
             ("Total Vencidos", f"R$ {v:.2f}", self.colors["perigo"]), 
             (f"A Vencer ({dias_config} dias)", f"R$ {av:.2f}", self.colors["aviso"]),
-            ("Base de Clientes", str(q), self.colors["dashboard"])
+            ("Base de Clientes", str(q), self.colors["dashboard"]),
+            ("Total Multas", f"R$ {total_multas:.2f}", self.colors["perigo"])
         ]
         for tit, val, col in lista_cards:
             c = ctk.CTkFrame(cards, border_width=1); c.pack(side="left", expand=True, padx=5, fill="both", ipady=10)
@@ -721,6 +725,7 @@ class AppHotelLTS(ctk.CTk):
         self.frame_acoes_lista = ctk.CTkFrame(self.frame_detalhes, fg_color="transparent")
         self.frame_acoes_lista.pack(fill="x", padx=10)
         
+        ctk.CTkButton(self.frame_acoes_lista, text="💬 WhatsApp", fg_color="#25D366", hover_color="#128C7E", width=120, command=self.enviar_lista_whatsapp).pack(side="right", padx=5)
         self.btn_fechar_lista = ctk.CTkButton(self.frame_acoes_lista, text="🔒 Fechar Lista", fg_color=self.colors["perigo"], width=120, command=self.fechar_lista_atual)
         self.btn_imprimir_lista = ctk.CTkButton(self.frame_acoes_lista, text="📄 Imprimir PDF", fg_color="#2c3e50", width=120, command=self.imprimir_lista_atual)
         # Botões iniciam ocultos
@@ -914,6 +919,23 @@ class AppHotelLTS(ctk.CTk):
                 self.after(0, lambda: self.configure(cursor="arrow"))
         threading.Thread(target=_task, daemon=True).start()
 
+    def enviar_lista_whatsapp(self) -> None:
+        if not self.lista_selecionada_id:
+            messagebox.showwarning("Aviso", "Selecione uma lista primeiro.")
+            return
+        
+        itens = self.core.get_itens_lista(self.lista_selecionada_id)
+        if not itens:
+            messagebox.showwarning("Aviso", "A lista está vazia.")
+            return
+            
+        msg = f"*LISTA DE COMPRAS #{self.lista_selecionada_id}*\n\n"
+        for i in itens:
+            msg += f"- {i['quantidade']}x {i['produto']} (R$ {i['valor_unitario']:.2f})\n"
+            
+        link = f"https://web.whatsapp.com/send?text={quote(msg)}"
+        webbrowser.open(link)
+
     def exportar_pdf_compras(self) -> None:
         self.configure(cursor="watch")
         def _task():
@@ -959,68 +981,43 @@ class AppHotelLTS(ctk.CTk):
         right_frame.pack(side="right", fill="both", expand=True)
 
         # --- Conteúdo do Painel Esquerdo ---
-        ctk.CTkLabel(left_frame, text="Agendar na Data Selecionada", font=("Arial", 14, "bold")).pack(pady=(10, 5))
-        
-        self.lbl_data_selecionada = ctk.CTkLabel(left_frame, text="Selecione uma data no calendário", text_color="gray")
-        self.lbl_data_selecionada.pack(pady=5)
-
-        self.combo_funcionarios = ctk.CTkComboBox(left_frame, width=250, values=["Nenhum"])
-        self.combo_funcionarios.pack(pady=5)
-
-        self.e_obs_agenda = ctk.CTkEntry(left_frame, width=250, placeholder_text="Observação (Turno, Tarefa...)")
-        self.e_obs_agenda.pack(pady=5)
-
-        btn_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
-        btn_frame.pack(pady=10)
-        ctk.CTkButton(btn_frame, text="Agendar", fg_color=self.colors["calendario"], hover_color=self.colors["calendario_hover"], command=self.agendar_funcionario_selecionado).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Remover", fg_color=self.colors["perigo"], command=self.remover_agendamento_selecionado).pack(side="left", padx=5)
-
-        # Separador
-        ctk.CTkFrame(left_frame, height=2, border_width=0, fg_color="gray").pack(fill="x", padx=10, pady=15)
-
-        # Gerenciamento de Funcionários
-        ctk.CTkLabel(left_frame, text="Gerenciar Funcionários", font=("Arial", 14, "bold")).pack(pady=5)
-        
+        # Botão de Adicionar Funcionário no TOPO
         add_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
         add_frame.pack(fill="x", padx=10, pady=5)
-        e_novo_func = ctk.CTkEntry(add_frame, placeholder_text="Nome do novo funcionário")
-        e_novo_func.pack(side="left", fill="x", expand=True)
         
         def adicionar_func_action():
-            nome = e_novo_func.get()
+            dialog = ctk.CTkInputDialog(text="Nome do Funcionário:", title="Novo Funcionário")
+            nome = dialog.get_input()
             if nome and self.current_user:
                 try:
                     self.core.adicionar_funcionario(nome, self.current_user['username'])
-                    e_novo_func.delete(0, 'end')
                     self.refresh_lista_funcionarios()
                 except Exception as e:
                     messagebox.showerror("Erro", str(e))
-        
-        e_novo_func.bind("<Return>", lambda e: adicionar_func_action())
-        ctk.CTkButton(add_frame, text="+", width=30, command=adicionar_func_action).pack(side="left", padx=5)
 
-        self.tree_funcionarios = ttk.Treeview(left_frame, columns=("ID", "Nome"), show="headings", height=5)
-        self.tree_funcionarios.heading("ID", text="#"); self.tree_funcionarios.column("ID", width=40, anchor="center")
-        self.tree_funcionarios.heading("Nome", text="Nome"); self.tree_funcionarios.column("Nome", width=200)
-        self.tree_funcionarios.pack(fill="x", expand=True, padx=10, pady=5)
-        
-        def remover_func_action():
-            if not self.tree_funcionarios or not self.current_user: return
-            sel = self.tree_funcionarios.selection()
-            if not sel: return
-            
-            item = self.tree_funcionarios.item(sel[0])
-            func_id, nome = item['values']
-            
-            if messagebox.askyesno("Confirmar", f"Deseja remover o funcionário '{nome}'?\nTodos os seus agendamentos também serão removidos."):
-                try:
-                    self.core.remover_funcionario(func_id, self.current_user['username'])
-                    self.refresh_lista_funcionarios()
-                    self.refresh_eventos_calendario() # Refresh calendar as schedules were removed
-                except Exception as e:
-                    messagebox.showerror("Erro", str(e))
+        ctk.CTkButton(add_frame, text="+ Novo Funcionário", command=adicionar_func_action, fg_color=self.colors["calendario"]).pack(fill="x")
 
-        ctk.CTkButton(left_frame, text="Remover Funcionário Selecionado", fg_color=self.colors["perigo"], command=remover_func_action).pack(pady=10)
+        # Área de Tarefas do Dia
+        ctk.CTkLabel(left_frame, text="Tarefas do Dia", font=("Arial", 14, "bold")).pack(pady=(15, 5))
+        self.lbl_data_selecionada = ctk.CTkLabel(left_frame, text="Selecione uma data", text_color="gray")
+        self.lbl_data_selecionada.pack(pady=5)
+
+        # Inputs para nova tarefa
+        self.combo_funcionarios = ctk.CTkComboBox(left_frame, width=250, values=["Nenhum"])
+        self.combo_funcionarios.pack(pady=5)
+        self.e_obs_agenda = ctk.CTkEntry(left_frame, width=250, placeholder_text="Tarefa / Turno")
+        self.e_obs_agenda.pack(pady=5)
+        ctk.CTkButton(left_frame, text="Adicionar Tarefa", fg_color=self.colors["sucesso"], command=self.agendar_funcionario_selecionado).pack(pady=5)
+
+        # Lista de Tarefas do Dia (Interativo)
+        self.tree_tarefas_dia = ttk.Treeview(left_frame, columns=("ID", "Func", "Obs"), show="headings", height=15)
+        self.tree_tarefas_dia.heading("ID", text="#"); self.tree_tarefas_dia.column("ID", width=0, stretch=False) # Oculto
+        self.tree_tarefas_dia.heading("Func", text="Funcionário"); self.tree_tarefas_dia.column("Func", width=120)
+        self.tree_tarefas_dia.heading("Obs", text="Tarefa"); self.tree_tarefas_dia.column("Obs", width=150)
+        self.tree_tarefas_dia.pack(fill="both", expand=True, padx=5, pady=10)
+        
+        # Botão de remover tarefa
+        ctk.CTkButton(left_frame, text="Remover Tarefa Selecionada", fg_color=self.colors["perigo"], command=self.remover_agendamento_selecionado).pack(pady=10)
 
         # --- Conteúdo do Painel Direito ---
         is_dark = ctk.get_appearance_mode() == "Dark"
@@ -1049,18 +1046,11 @@ class AppHotelLTS(ctk.CTk):
         self.atualizar_data_selecionada_calendario(None) # Seta a data inicial
 
     def refresh_lista_funcionarios(self):
-        if not self.tree_funcionarios or not self.combo_funcionarios: return
-        
-        # Limpa
-        self.tree_funcionarios.delete(*self.tree_funcionarios.get_children())
+        if not self.combo_funcionarios: return
         
         # Busca
         self.funcionarios_cache = [dict(f) for f in self.core.get_funcionarios()]
         nomes_funcionarios = [f['nome'] for f in self.funcionarios_cache]
-        
-        # Popula
-        for f in self.funcionarios_cache:
-            self.tree_funcionarios.insert("", "end", values=(f['id'], f['nome']))
         
         self.combo_funcionarios.configure(values=["Nenhum"] + nomes_funcionarios)
         self.combo_funcionarios.set("Nenhum")
@@ -1076,31 +1066,28 @@ class AppHotelLTS(ctk.CTk):
         dt_obj = datetime.strptime(cal_date, '%d/%m/%Y')
         
         eventos = self.core.get_agenda_mes(dt_obj.year, dt_obj.month)
+        # eventos é dict {data_iso: "Func1, Func2"}
         
-        for data_iso, nome_func in eventos.items():
+        for data_iso, nomes in eventos.items():
             event_dt = datetime.strptime(data_iso, '%Y-%m-%d')
-            self.calendario.calevent_create(event_dt, nome_func, 'func_agenda')
+            self.calendario.calevent_create(event_dt, "Tarefas", 'func_agenda')
             
         self.calendario.tag_config('func_agenda', background=self.colors["calendario"], foreground='white')
 
     def atualizar_data_selecionada_calendario(self, event):
-        if not self.calendario or not self.lbl_data_selecionada: return
+        if not self.calendario or not self.lbl_data_selecionada or not self.tree_tarefas_dia: return
         data_selecionada = self.calendario.get_date()
         self.lbl_data_selecionada.configure(text=f"Data: {data_selecionada}")
         
-        # Busca agendamento existente para preencher os campos
+        # Limpa lista lateral
+        self.tree_tarefas_dia.delete(*self.tree_tarefas_dia.get_children())
+        
+        # Busca tarefas do dia
         try:
             data_iso = datetime.strptime(data_selecionada, '%d/%m/%Y').strftime('%Y-%m-%d')
-            agendamento = self.core.get_agendamento_dia(data_iso)
-            
-            if agendamento:
-                self.combo_funcionarios.set(agendamento['nome'])
-                self.e_obs_agenda.delete(0, 'end')
-                if agendamento['obs']:
-                    self.e_obs_agenda.insert(0, agendamento['obs'])
-            else:
-                self.combo_funcionarios.set("Nenhum")
-                self.e_obs_agenda.delete(0, 'end')
+            tarefas = self.core.get_tarefas_dia(data_iso)
+            for t in tarefas:
+                self.tree_tarefas_dia.insert("", "end", values=(t['id'], t['nome'], t['obs']))
         except Exception as e:
             print(f"Erro ao buscar agendamento: {e}")
 
@@ -1130,21 +1117,25 @@ class AppHotelLTS(ctk.CTk):
         try:
             self.core.salvar_agendamento(data_iso, func_id, obs, self.current_user['username'])
             self.refresh_eventos_calendario()
+            self.atualizar_data_selecionada_calendario(None) # Atualiza lista lateral
+            self.e_obs_agenda.delete(0, 'end')
         except Exception as e:
             messagebox.showerror("Erro ao Agendar", str(e))
 
     def remover_agendamento_selecionado(self):
-        if not self.calendario or not self.current_user: return
+        if not self.tree_tarefas_dia or not self.current_user: return
         
-        data_str = self.calendario.get_date()
-        data_iso = datetime.strptime(data_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+        sel = self.tree_tarefas_dia.selection()
+        if not sel: return
         
-        if messagebox.askyesno("Confirmar", f"Deseja remover o agendamento do dia {data_str}?"):
+        item = self.tree_tarefas_dia.item(sel[0])
+        agenda_id = item['values'][0]
+        
+        if messagebox.askyesno("Confirmar", "Deseja remover esta tarefa?"):
             try:
-                self.core.remover_agendamento(data_iso, self.current_user['username'])
+                self.core.remover_agendamento_id(agenda_id, self.current_user['username'])
                 self.refresh_eventos_calendario()
-                self.combo_funcionarios.set("Nenhum")
-                self.e_obs_agenda.delete(0, 'end')
+                self.atualizar_data_selecionada_calendario(None)
             except Exception as e:
                 messagebox.showerror("Erro ao Remover", str(e))
 
@@ -1188,7 +1179,6 @@ class AppHotelLTS(ctk.CTk):
         tabview.pack(fill="both", expand=True, padx=10, pady=5)
         tab_creditos = tabview.add("Extrato de Créditos")
         tab_multas_hist = tabview.add("Histórico de Multas")
-        tab_inadimplencia = tabview.add("Inadimplência (Resumo)")
 
         # --- ABA 1: EXTRATO DE CRÉDITOS ---
         self.ent_busca_lanc = ctk.CTkEntry(tab_creditos, placeholder_text="Filtrar por nome ou documento...", width=500)
@@ -1255,23 +1245,6 @@ class AppHotelLTS(ctk.CTk):
         ent_busca_multas.bind("<KeyRelease>", lambda e: atualizar_lista_multas())
         atualizar_lista_multas()
 
-        # --- ABA 3: INADIMPLÊNCIA (RESUMO) ---
-        ctk.CTkLabel(tab_inadimplencia, text="Clientes com multas pendentes de pagamento", text_color="gray").pack(pady=5)
-        
-        tv_m = ttk.Treeview(tab_inadimplencia, columns=("N", "D", "T", "V"), show="headings")
-        tv_m.heading("N", text="Nome"); tv_m.column("N", width=300)
-        tv_m.heading("D", text="Documento"); tv_m.column("D", width=150, anchor="center")
-        tv_m.heading("T", text="Telefone"); tv_m.column("T", width=150, anchor="center")
-        tv_m.heading("V", text="Dívida Total"); tv_m.column("V", width=100, anchor="center")
-        tv_m.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Carrega dados
-        devedores = self.core.get_devedores_multas()
-        for d in devedores:
-            tv_m.insert("", "end", values=(d[0], d[1], d[2], f"R$ {d[3]:.2f}"))
-        
-        # Duplo clique para ir ao histórico do cliente e pagar
-        tv_m.bind("<Double-1>", lambda e: self.tela_historico(tv_m.item(tv_m.selection()[0])['values'][0], str(tv_m.item(tv_m.selection()[0])['values'][1])))
 
     def atualizar_lista_lancamentos(self) -> None:
         self.tree_l.delete(*self.tree_l.get_children())
@@ -1535,6 +1508,7 @@ class AppHotelLTS(ctk.CTk):
         
         f_busca = ctk.CTkFrame(jan, fg_color="transparent"); f_busca.pack(fill="x", padx=10)
         e_busca = ctk.CTkEntry(f_busca, placeholder_text="Nome ou CPF/CNPJ"); e_busca.pack(side="left", fill="x", expand=True, padx=5)
+        ctk.CTkButton(f_busca, text="+ Novo Hóspede", width=100, command=self.janela_cadastro_hospede).pack(side="right", padx=5)
         
         # Treeview pequena para resultados
         tv_res = ttk.Treeview(jan, columns=("N", "D"), show="headings", height=5)
@@ -1631,7 +1605,7 @@ class AppHotelLTS(ctk.CTk):
         item = self.tree_z.identify_row(event.y)
         if not item: return
         self.tree_z.selection_set(item)
-        tp, val, dt_mov, *_ = self.tree_z.item(item)['values']
+        id_mov, tp, val, dt_mov, *_ = self.tree_z.item(item)['values']
         if tp != "ENTRADA": return
         jan = ctk.CTkToplevel(self); jan.title("Ajustar Data"); jan.geometry("300x320")
         jan.transient(self); jan.lift(); jan.focus_force()
@@ -1640,7 +1614,7 @@ class AppHotelLTS(ctk.CTk):
         
         cal = DateEntry(jan, width=12, background='darkblue', date_pattern='dd/mm/yyyy'); cal.pack(pady=20)
         def ok() -> None:
-            self.core.atualizar_data_vencimento_manual(str(doc), cal.get(), val, dt_mov, self.current_user['username'])
+            self.core.atualizar_data_vencimento_manual(id_mov, cal.get(), self.current_user['username'])
             jan.destroy(); self.tela_historico(nome, doc)
         ctk.CTkButton(jan, text="Atualizar Vencimento", command=ok).pack(pady=10)
 

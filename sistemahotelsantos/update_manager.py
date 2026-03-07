@@ -14,6 +14,11 @@ import threading
 import requests
 from tkinter import messagebox
 from typing import Optional, Tuple, Callable
+from version import __version__
+
+class UpdateManager:
+    def __init__(self):
+        self.versao_atual = __version__
 
 
 class UpdateManager:
