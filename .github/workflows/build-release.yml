@@ -4,17 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    paths:
-      - 'sistemahotelsantos/**'
-      - '.github/workflows/build-release.yml'
-
-  # Permitir disparo manual via GitHub UI (Opcional)
-  workflow_dispatch:
-    inputs:
-      versao:
-        description: 'Versão para build (ex: 5.0.2)'
-        required: false
-        default: ''
 
 permissions:
   contents: write
@@ -41,33 +30,26 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Instalar dependências
+      # ✅ IMPORTANTE: Instalar PyInstaller ANTES
+      - name: Instalar PyInstaller e dependências
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r sistemahotelsantos/requirements.txt
 
-      - name: Extrair versão
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            VERSION=$(echo ${{ github.ref }} | sed 's/refs\/tags\/v//')
-          else
-            VERSION=${{ inputs.versao }}
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        shell: bash
-
+      # ✅ IMPORTANTE: Usar bash shell no Windows
       - name: Criar executável
         run: |
           cd sistemahotelsantos
-          pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm --icon="app.ico" app_gui.py
+          pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm app_gui.py
+        shell: bash
 
+      # ✅ IMPORTANTE: Usar bash shell para renomear
       - name: Renomear arquivo
         run: |
           cd sistemahotelsantos/dist
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            ren SistemaHotelSantos.exe ${{ matrix.nome_saida }}
+            mv SistemaHotelSantos.exe ${{ matrix.nome_saida }}
           else
             mv SistemaHotelSantos ${{ matrix.nome_saida }}
           fi
@@ -82,7 +64,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    # Libera release apenas em push de tags
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
@@ -95,17 +76,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arquivos/*/*
-          body: |
-            # Versão ${{ github.ref_name }}
-            
-            ## Alterações
-            - [Adicione as alterações aqui]
-            
-            ## Downloads
-            - **Windows**: SistemaHotelSantos-Windows.exe
-            - **Linux**: SistemaHotelSantos-Linux
-            
-            ## Instalação
-            1. Baixe o arquivo correspondente ao seu sistema operacional
-            2. Execute para instalar
-            3. O sistema atualizará automaticamente em futuras releases
