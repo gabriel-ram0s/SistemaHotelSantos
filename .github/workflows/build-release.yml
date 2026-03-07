@@ -8,11 +8,16 @@ on:
 permissions:
   contents: write
 
+env:
+  GIT_TIMEOUT: 300
+  GIT_COMPRESSION: 0
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
         include:
@@ -22,39 +27,40 @@ jobs:
             nome_saida: SistemaHotelSantos-Linux
 
     steps:
-      # ✨ IMPORTANTE: Retry automático
-      - name: Checkout repository (with retry)
+      - name: Configure git timeout
+        run: |
+          git config --global http.connectTimeout 30
+          git config --global http.timeout 300
+          git config --global core.compression 0
+        shell: bash
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: false
-        
-      # Se falhar, tenta novamente
-      - name: Retry checkout if failed
-        if: failure()
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          token: ${{ secrets.GITHUB_TOKEN }}
+        timeout-minutes: 10
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
+        timeout-minutes: 10
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r sistemahotelsantos/requirements.txt
+        timeout-minutes: 15
 
       - name: Build executable
         run: |
           cd sistemahotelsantos
           pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm app_gui.py
         shell: bash
+        timeout-minutes: 30
 
       - name: Rename executable (Windows)
         if: runner.os == 'Windows'
@@ -71,6 +77,7 @@ jobs:
         with:
           name: ${{ matrix.nome_saida }}
           path: sistemahotelsantos/dist/${{ matrix.nome_saida }}
+          retention-days: 7
 
   release:
     needs: build
@@ -88,3 +95,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arquivos/*/*
+          body: |
+            # Release ${{ github.ref_name }}
+            
+            ## 📥 Downloads
+            - **Windows**: SistemaHotelSantos-Windows.exe
+            - **Linux**: SistemaHotelSantos-Linux
