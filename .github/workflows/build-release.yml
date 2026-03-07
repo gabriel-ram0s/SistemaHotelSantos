@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30  # ← Global timeout
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -21,8 +22,11 @@ jobs:
             nome_saida: SistemaHotelSantos-Linux
 
     steps:
-      - name: Clonar repositório
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
 
       - name: Instalar Python 3.12
         uses: actions/setup-python@v5
@@ -30,29 +34,32 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      # ✅ IMPORTANTE: Instalar PyInstaller ANTES
-      - name: Instalar PyInstaller e dependências
+      - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r sistemahotelsantos/requirements.txt
+        timeout-minutes: 10
 
-      # ✅ IMPORTANTE: Usar bash shell no Windows
       - name: Criar executável
         run: |
           cd sistemahotelsantos
           pyinstaller --name="SistemaHotelSantos" --onefile --windowed --clean --noconfirm app_gui.py
         shell: bash
+        timeout-minutes: 15
 
-      # ✅ IMPORTANTE: Usar bash shell para renomear
-      - name: Renomear arquivo
+      - name: Renomear arquivo (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd sistemahotelsantos\dist
+          ren SistemaHotelSantos.exe SistemaHotelSantos-Windows.exe
+        shell: cmd
+
+      - name: Renomear arquivo (Linux)
+        if: runner.os == 'Linux'
         run: |
           cd sistemahotelsantos/dist
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            mv SistemaHotelSantos.exe ${{ matrix.nome_saida }}
-          else
-            mv SistemaHotelSantos ${{ matrix.nome_saida }}
-          fi
+          mv SistemaHotelSantos SistemaHotelSantos-Linux
         shell: bash
 
       - name: Upload executável
@@ -60,11 +67,13 @@ jobs:
         with:
           name: ${{ matrix.nome_saida }}
           path: sistemahotelsantos/dist/${{ matrix.nome_saida }}
+          retention-days: 7
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 10
 
     steps:
       - name: Baixar arquivos
@@ -76,3 +85,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arquivos/*/*
+          body: |
+            # Release ${{ github.ref_name }}
+            
+            ## 📥 Downloads
+            - **Windows**: SistemaHotelSantos-Windows.exe
+            - **Linux**: SistemaHotelSantos-Linux
